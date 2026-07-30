@@ -107,8 +107,8 @@ describe('Middleware Path Matching', () => {
         r = new TrieRouter()
         r.addMiddleware('/', () => "global")
         r.addMiddleware('/users', () => 'users level')
-        r.addMiddleware('/user/**', () => "/user** level")
-        r.addMiddleware('/user/name', () => '/user/** and /user/name')
+        r.addMiddleware('/user/*', () => "/user* level")
+        r.addMiddleware('/user/name', () => '/user/* and /user/name')
         r.add('GET', '/user/name', () => 'handler')
     })
 
@@ -125,7 +125,7 @@ describe('Middleware Path Matching', () => {
     test("collects all matching middleware", () => {
         const result = r.search('GET', '/user/name')
         const outputs = result?.handler?.map(fn => fn())
-        expect(outputs).toEqual(["global", "/user** level", '/user/** and /user/name', 'handler'])
+        expect(outputs).toEqual(["global", "/user* level", '/user/* and /user/name', 'handler'])
     })
 
     test("collect only users/ level handlers", () => {
@@ -135,3 +135,70 @@ describe('Middleware Path Matching', () => {
     })
 
  })
+
+// ---------------------------------------------------------------------------
+// Ported from diesel's lib/router/trie.test.ts
+// Diesel fixed the middleware-scoping bug (620b6e1) but never fixed the
+// backtracking bug (still fails on diesel's own suite too - "fix/router-backtracking"
+// branch didn't actually land a fix). Both scenarios are run against all three
+// lookup strategies peepal exposes (search / optimisedSearch / find) since they
+// each re-implement the walk independently and can drift out of sync.
+// ---------------------------------------------------------------------------
+
+const LOOKUP_METHODS = ["search", "optimisedSearch", "find"] as const;
+
+for (const method of LOOKUP_METHODS) {
+  describe(`TrieRouter.${method} - path mid check (ported from diesel)`, () => {
+    let r: TrieRouter;
+
+    beforeAll(() => {
+      r = new TrieRouter();
+      // /pradeep middleware only, it shouldn't run for /pradeep/ok
+      r.addMiddleware("/pradeep", () => {});
+      r.add("GET", "/pradeep/ok", () => "ok");
+
+      r.addMiddleware("/user/*", () => {});
+      r.add("GET", "/user/me", () => "me");
+    });
+
+    test("should not include static-path middleware in child route", () => {
+      const result = (r as any)[method]("GET", "/pradeep/ok");
+      // only the route's own handler, no leaked "/pradeep" middleware
+      expect(result.handler?.length).toBe(1);
+    });
+
+    test("should include wildcard middleware for matching descendant", () => {
+      const result = (r as any)[method]("GET", "/user/me");
+      // 1 middleware + 1 handler
+      expect(result.handler?.length).toBe(2);
+    });
+  });
+
+  describe(`TrieRouter.${method} - dynamic backtracking (ported from diesel)`, () => {
+    let r: TrieRouter;
+
+    beforeAll(() => {
+      r = new TrieRouter();
+      r.add("GET", "/users/:id/posts", () => "posts");
+      r.add("GET", "/users/me/settings", () => "settings");
+    });
+
+    test("should match /users/me/settings (static branch)", () => {
+      const result = (r as any)[method]("GET", "/users/me/settings");
+      const handler = result.handler ?? [];
+      expect(handler[handler.length - 1]?.()).toBe("settings");
+    });
+
+    test("should match /users/123/posts (dynamic branch)", () => {
+      const result = (r as any)[method]("GET", "/users/123/posts");
+      const handler = result.handler ?? [];
+      expect(handler[handler.length - 1]?.()).toBe("posts");
+    });
+
+    test("should match /users/me/posts by backtracking off the static 'me' branch", () => {
+      const result = (r as any)[method]("GET", "/users/me/posts");
+      const handler = result.handler ?? [];
+      expect(handler[handler.length - 1]?.()).toBe("posts");
+    });
+  });
+}

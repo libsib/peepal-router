@@ -62,8 +62,6 @@ export class TrieRouter {
   }
 
   insert(method: string, pattern: string, handler: Function) {
-    const handlers = Array.isArray(handler) ? handler : [handler];
-
     let node = this.root;
 
     if (pattern === "/") {
@@ -73,7 +71,6 @@ export class TrieRouter {
     }
 
     const pathSegments = pattern.split("/").filter(Boolean);
-    const collectedMiddlewares = this.globalMiddlewares.slice();
 
     for (let i = 0; i < pathSegments.length; i++) {
       const element = pathSegments[i];
@@ -89,9 +86,6 @@ export class TrieRouter {
       node = node.children[key];
       if (cleanParam) {
         node.paramName = cleanParam;
-      }
-      if (node.middlewares.length > 0) {
-        collectedMiddlewares.push(...node.middlewares);
       }
     }
     node.handlers[method] = handler;

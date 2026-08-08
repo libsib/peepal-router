@@ -1,4 +1,4 @@
-import { TrieRouter } from './router'; 
+import { TrieRouter } from '../src/router';
 import { performance } from 'perf_hooks';
 
 const router = new TrieRouter();

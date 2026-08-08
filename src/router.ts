@@ -1,24 +1,25 @@
 // Copyright (c) 2026 Pradeep
 // Licensed under the MIT License
 
+export const ALL_METHOD = "ALL";
+
 class TrieNodes {
   children: Record<string, TrieNodes>;
   isEndOfWord: boolean;
   handlers: Record<string, Function> | undefined;
   middlewares: Function[];
-  paramName: string;
+  params: Record<string, string>;
   finalHandler: Record<string, Array<Function> | undefined>;
   constructor() {
     this.children = {};
     this.handlers = {};
     this.isEndOfWord = false;
     this.middlewares = [];
-    this.paramName = "";
+    this.params = {};
     this.finalHandler = undefined;
   }
 }
 
-//
 export class TrieRouter {
   root: TrieNodes;
   globalMiddlewares: Function[];
@@ -85,7 +86,7 @@ export class TrieRouter {
 
       node = node.children[key];
       if (cleanParam) {
-        node.paramName = cleanParam;
+        node.params[method] = cleanParam;
       }
     }
     node.handlers[method] = handler;
@@ -100,7 +101,7 @@ export class TrieRouter {
     let node = this.root;
     const pathSegments = pattern.split("/");
 
-    let collected: Array<Function> | undefined;
+    let middlewares: Array<Function> = this.globalMiddlewares.slice();
     let params: Record<string, string> | undefined;
 
     for (let i = 0; i < pathSegments.length; i++) {
@@ -113,27 +114,22 @@ export class TrieRouter {
       if (node.children[element]) {
         if (wildcard && wildcard.middlewares.length > 0) {
           const mw = wildcard.middlewares;
-          if (!collected) collected = this.globalMiddlewares.slice();
-          for (let j = 0; j < mw.length; j++) collected.push(mw[j]);
+          for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
         }
         node = node.children[element]!;
       } else if (node.children[":"]) {
         if (wildcard && wildcard.middlewares.length > 0) {
           const mw = wildcard.middlewares;
-          if (!collected) collected = this.globalMiddlewares.slice();
-          for (let j = 0; j < mw.length; j++) collected.push(mw[j]);
+          for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
         }
         node = node.children[":"];
         if (!params) params = {};
-        params[node.paramName] = element;
+        params[node.params[method]] = element;
       } else if (wildcard) {
         node = wildcard;
         break;
       } else {
-        return {
-          params: params,
-          handler: this.globalMiddlewares,
-        };
+        return { params: params, middlewares: middlewares, handler: undefined };
       }
     }
 
@@ -141,22 +137,16 @@ export class TrieRouter {
     // bound to an ancestor on the walk must not leak into its descendants.
     if (node?.middlewares?.length > 0) {
       const mw = node.middlewares;
-      if (!collected) collected = this.globalMiddlewares.slice();
       for (let j = 0; j < mw.length; j++) {
-        collected.push(mw[j]);
+        middlewares.push(mw[j]);
       }
     }
 
-    // find for the exact method, falling back to a handler registered for ALL methods
-    const methodHandler = node.handlers[method] || node.handlers["ALL"];
-    if (methodHandler) {
-      if (!collected) collected = this.globalMiddlewares.slice();
-      collected.push(methodHandler);
-    }
-
+    const methodHandler = node.handlers[method] || node.handlers[ALL_METHOD];
     return {
       params: params,
-      handler: collected,
+      middlewares: middlewares,
+      handler: methodHandler,
     };
   }
 
@@ -164,7 +154,7 @@ export class TrieRouter {
     let node = this.root;
     let element = "";
 
-    let collected: Array<Function> | undefined;
+    let middlewares: Array<Function> = this.globalMiddlewares.slice();
     let params: Record<string, string> | undefined;
 
     for (let i = 0; i <= pattern.length; i++) {
@@ -178,24 +168,22 @@ export class TrieRouter {
         if (node.children[element]) {
           if (wildcard && wildcard.middlewares.length > 0) {
             const mw = wildcard.middlewares;
-            if (!collected) collected = this.globalMiddlewares.slice();
-            for (let j = 0; j < mw.length; j++) collected.push(mw[j]);
+            for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
           }
           node = node.children[element];
         } else if (node.children[":"]) {
           if (wildcard && wildcard.middlewares.length > 0) {
             const mw = wildcard.middlewares;
-            if (!collected) collected = this.globalMiddlewares.slice();
-            for (let j = 0; j < mw.length; j++) collected.push(mw[j]);
+            for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
           }
           node = node.children[":"];
           if (!params) params = {};
-          params[node.paramName] = element;
+          params[node.params[method]] = element;
         } else if (wildcard) {
           node = wildcard;
           break;
         } else {
-          return { params: params, handler: this.globalMiddlewares };
+          return { params: params, middlewares: middlewares, handler: undefined };
         }
 
         element = "";
@@ -209,20 +197,16 @@ export class TrieRouter {
     // bound to an ancestor on the walk must not leak into its descendants.
     if (node?.middlewares?.length > 0) {
       const mw = node.middlewares;
-      if (!collected) collected = this.globalMiddlewares.slice();
       for (let j = 0; j < mw.length; j++) {
-        collected.push(mw[j]);
+        middlewares.push(mw[j]);
       }
     }
 
-    const methodHandler = node.handlers[method] || node.handlers["ALL"];
-    if (methodHandler) {
-      if (!collected) collected = this.globalMiddlewares.slice();
-      collected.push(methodHandler);
-    }
+    const methodHandler = node.handlers[method] || node.handlers[ALL_METHOD];
     return {
       params: params,
-      handler: collected,
+      middlewares: middlewares,
+      handler: methodHandler,
     };
   }
 
@@ -244,20 +228,22 @@ export class TrieRouter {
       } else if (node.children[":"]) {
         node = node.children[":"];
         if (!params) params = {};
-        params[node.paramName] = element;
+        params[node.params[method]] = element;
       } else if (node.children["*"]) {
         node = node.children["*"];
         break;
       } else {
         return {
           params: params,
-          handler: node?.finalHandler?.[method] ?? node?.finalHandler?.["ALL"],
+          middlewares: undefined,
+          handler: node?.finalHandler?.[method] ?? node?.finalHandler?.[ALL_METHOD],
         };
       }
     }
     return {
       params: params,
-      handler: node?.finalHandler?.[method] ?? node?.finalHandler?.["ALL"],
+      middlewares: undefined,
+      handler: node?.finalHandler?.[method] ?? node?.finalHandler?.[ALL_METHOD],
     };
   }
   // unstabel api
@@ -284,8 +270,6 @@ export class TrieRouter {
         const finalHandler = [...ownMiddlewares, node.handlers[method]];
         node.finalHandler[method] = finalHandler;
       }
-      // node.middlewares=undefined
-      // node.handlers=undefined
     }
 
     // a "*" child cascades to its non-wildcard siblings' descendants,

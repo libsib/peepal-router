@@ -1,4 +1,4 @@
-import { TrieRouter } from "./router.ts";
+import { TrieRouter } from "../src/router.ts";
 
 const r = new TrieRouter();
 // r.pushMiddleware("/", () => console.log("global"))

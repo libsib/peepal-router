@@ -1,7 +1,9 @@
 import { TrieRouter } from '../../src/router';
+import { RadixRouter } from '../../src/radix';
 import { performance } from 'perf_hooks';
 
 const router = new TrieRouter();
+const radix = new RadixRouter();
 
 function mockMiddleware() {}
 function mockHandler() {}
@@ -10,6 +12,10 @@ function mockHandler() {}
 router.pushMiddleware("/", mockMiddleware);
 router.pushMiddleware("/api", mockMiddleware);
 router.pushMiddleware("/api/v1", mockMiddleware);
+
+radix.pushMiddleware("/", mockMiddleware);
+radix.pushMiddleware("/api", mockMiddleware);
+radix.pushMiddleware("/api/v1", mockMiddleware);
 
 console.log("Generating massive routing table with deep middlewares...");
 
@@ -20,12 +26,19 @@ for (let i = 0; i < 500; i++) {
   if (i % 10 === 0) {
     router.pushMiddleware(`/api/v1/resource${i}`, mockMiddleware);
     router.pushMiddleware(`/api/v1/resource${i}/:id`, mockMiddleware);
+    radix.pushMiddleware(`/api/v1/resource${i}`, mockMiddleware);
+    radix.pushMiddleware(`/api/v1/resource${i}/:id`, mockMiddleware);
   }
 
   router.add("GET", `/api/v1/resource${i}`, mockHandler);
   router.add("GET", `/api/v1/resource${i}/:id`, mockHandler);
   router.add("POST", `/api/v1/resource${i}/:id/action`, mockHandler);
   router.add("DELETE", `/api/v1/resource${i}/:id/action/:subId`, mockHandler);
+
+  radix.add("GET", `/api/v1/resource${i}`, mockHandler);
+  radix.add("GET", `/api/v1/resource${i}/:id`, mockHandler);
+  radix.add("POST", `/api/v1/resource${i}/:id/action`, mockHandler);
+  radix.add("DELETE", `/api/v1/resource${i}/:id/action/:subId`, mockHandler);
   
   // Select paths that heavily utilize the deep middlewares
   if (i % 25 === 0) {
@@ -47,7 +60,8 @@ for (let i = 0; i < 10000; i++) {
   const path = testPaths[i % pathCount];
   router.search("POST", path!);
   router.find("POST", path);
-  router.optimisedSearch("POST", path!)
+  router.optimisedSearch("POST", path!);
+  radix.find("POST", path!);
 }
 
 console.log(`Running intense benchmark with ${ITERATIONS} iterations...`);
@@ -71,14 +85,23 @@ const timeFind = endFind - startFind;
 const startOptimisedSearch = performance.now()
 for (let i = 0; i < ITERATIONS; i++) {
   const path = testPaths[i % pathCount];
-  router.find("POST", path);
+  router.optimisedSearch("POST", path!);
 }
 const endOptimisedSearch = performance.now();
 const timeOptimisedSearch = endOptimisedSearch - startOptimisedSearch;
 
+const startRadix = performance.now();
+for (let i = 0; i < ITERATIONS; i++) {
+  const path = testPaths[i % pathCount];
+  radix.find("POST", path!);
+}
+const endRadix = performance.now();
+const timeRadix = endRadix - startRadix;
+
 const searchOpsPerSec = Math.floor(ITERATIONS / (timeSearch / 1000));
 const findOpsPerSec = Math.floor(ITERATIONS / (timeFind / 1000));
 const OptimisedSearchOpsPerSec = Math.floor(ITERATIONS / (timeOptimisedSearch / 1000));
+const radixOpsPerSec = Math.floor(ITERATIONS / (timeRadix / 1000));
 
 console.log("=====================================");
 console.log(`Old Search Method Time: ${timeSearch.toFixed(2)} ms`);
@@ -92,6 +115,11 @@ console.log("=====================================");
 console.log("=====================================");
 console.log(`New Optimised Search Time:   ${timeOptimisedSearch.toFixed(2)} ms`);
 console.log(`New optimisedSearch Speed: ${OptimisedSearchOpsPerSec.toLocaleString()} ops/sec`);
+console.log("=====================================");
+
+console.log("=====================================");
+console.log(`Radix find Time:   ${timeRadix.toFixed(2)} ms`);
+console.log(`Radix find Speed: ${radixOpsPerSec.toLocaleString()} ops/sec`);
 console.log("=====================================");
 
 // const multiplier = (findOpsPerSec / searchOpsPerSec).toFixed(2);

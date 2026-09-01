@@ -1,4 +1,5 @@
 import { PeepalRouter, PeepalCompiledRouter } from './peepal';
+import { PeepalRadixRouter } from './radix';
 import { Rou3Router } from './rou3';
 import { FindMyWayRouter } from './find-my-way';
 import type { RouterInstance } from './interface';
@@ -184,6 +185,7 @@ function runSuite(title: string, routes: string[], lookupBase: number): void {
   const routers: Record<string, RouterInstance> = {
     "Peepal(search)": new PeepalRouter(),
     "Peepal(find)": new PeepalCompiledRouter(),
+    Radix: new PeepalRadixRouter(),
     Rou3: new Rou3Router(),
     FindMyWay: new FindMyWayRouter(),
   };

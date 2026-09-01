@@ -1,126 +1,168 @@
+/**
+ * Peepal lookup-method benchmark.
+ *
+ *   bun routers/peepal-bench.ts                 # every method
+ *   bun routers/peepal-bench.ts search          # just search()
+ *   bun routers/peepal-bench.ts search find     # two of them
+ *
+ * If benchmarks/baseline/router.ts exists it is benched side by side with
+ * the working-tree router in the SAME process, so JIT and GC state match.
+ * Create it with:  npm run bench:baseline   (defaults to `main`)
+ */
 import { TrieRouter } from '../../src/router';
 import { RadixRouter } from '../../src/radix';
 import { performance } from 'perf_hooks';
+import { existsSync } from 'fs';
 
-const router = new TrieRouter();
-const radix = new RadixRouter();
+const ITERATIONS = Number(process.env.ITERATIONS ?? 1_000_000);
+const WARMUP = 10_000;
+
+const KNOWN = ['search', 'find', 'optimisedSearch'] as const;
+type MethodName = (typeof KNOWN)[number];
+
+// CLI
+
+const args = process.argv.slice(2).filter((a) => !a.startsWith('-'));
+let selected: MethodName[];
+if (args.length === 0 || args.includes('all')) {
+  selected = [...KNOWN];
+} else {
+  const bad = args.filter((a) => !KNOWN.includes(a as MethodName));
+  if (bad.length) {
+    console.error(`unknown method(s): ${bad.join(', ')}`);
+    console.error(`known: ${KNOWN.join(', ')}, all`);
+    process.exit(1);
+  }
+  selected = args as MethodName[];
+}
+
+// Optional baseline snapshot (gitignored, generated from a git ref)
+
+const BASELINE_PATH = new URL('../baseline/router.ts', import.meta.url);
+let BaselineTrieRouter: any = null;
+if (existsSync(BASELINE_PATH)) {
+  ({ TrieRouter: BaselineTrieRouter } = await import('../baseline/router.ts'));
+}
+
+// Routing table — identical for every variant
 
 function mockMiddleware() {}
 function mockHandler() {}
 
-// Global and high level middlewares
-router.pushMiddleware("/", mockMiddleware);
-router.pushMiddleware("/api", mockMiddleware);
-router.pushMiddleware("/api/v1", mockMiddleware);
+function seed(router: any): void {
+  router.pushMiddleware('/', mockMiddleware);
+  router.pushMiddleware('/api', mockMiddleware);
+  router.pushMiddleware('/api/v1', mockMiddleware);
 
-radix.pushMiddleware("/", mockMiddleware);
-radix.pushMiddleware("/api", mockMiddleware);
-radix.pushMiddleware("/api/v1", mockMiddleware);
+  for (let i = 0; i < 500; i++) {
+    // middlewares injected deep into the branches to force array allocations
+    if (i % 10 === 0) {
+      router.pushMiddleware(`/api/v1/resource${i}`, mockMiddleware);
+      router.pushMiddleware(`/api/v1/resource${i}/:id`, mockMiddleware);
+    }
 
-console.log("Generating massive routing table with deep middlewares...");
-
-const testPaths: string[] = [];
-
-for (let i = 0; i < 500; i++) {
-  // Inject middlewares deep into the branches to force array allocations
-  if (i % 10 === 0) {
-    router.pushMiddleware(`/api/v1/resource${i}`, mockMiddleware);
-    router.pushMiddleware(`/api/v1/resource${i}/:id`, mockMiddleware);
-    radix.pushMiddleware(`/api/v1/resource${i}`, mockMiddleware);
-    radix.pushMiddleware(`/api/v1/resource${i}/:id`, mockMiddleware);
-  }
-
-  router.add("GET", `/api/v1/resource${i}`, mockHandler);
-  router.add("GET", `/api/v1/resource${i}/:id`, mockHandler);
-  router.add("POST", `/api/v1/resource${i}/:id/action`, mockHandler);
-  router.add("DELETE", `/api/v1/resource${i}/:id/action/:subId`, mockHandler);
-
-  radix.add("GET", `/api/v1/resource${i}`, mockHandler);
-  radix.add("GET", `/api/v1/resource${i}/:id`, mockHandler);
-  radix.add("POST", `/api/v1/resource${i}/:id/action`, mockHandler);
-  radix.add("DELETE", `/api/v1/resource${i}/:id/action/:subId`, mockHandler);
-  
-  // Select paths that heavily utilize the deep middlewares
-  if (i % 25 === 0) {
-    testPaths.push(`/api/v1/resource${i}`);
-    testPaths.push(`/api/v1/resource${i}/999`);
-    testPaths.push(`/api/v1/resource${i}/999/action`);
-    testPaths.push(`/api/v1/resource${i}/999/action/888`);
+    router.add('GET', `/api/v1/resource${i}`, mockHandler);
+    router.add('GET', `/api/v1/resource${i}/:id`, mockHandler);
+    router.add('POST', `/api/v1/resource${i}/:id/action`, mockHandler);
+    router.add('DELETE', `/api/v1/resource${i}/:id/action/:subId`, mockHandler);
   }
 }
 
-testPaths.push("/api/v1/missing/route/entirely");
-testPaths.push("/static/images/notfound.png");
+function makeTestPaths(): string[] {
+  const paths: string[] = [];
+  for (let i = 0; i < 500; i++) {
+    // paths that heavily utilize the deep middlewares
+    if (i % 25 === 0) {
+      paths.push(`/api/v1/resource${i}`);
+      paths.push(`/api/v1/resource${i}/999`);
+      paths.push(`/api/v1/resource${i}/999/action`);
+      paths.push(`/api/v1/resource${i}/999/action/888`);
+    }
+  }
+  paths.push('/api/v1/missing/route/entirely');
+  paths.push('/static/images/notfound.png');
+  return paths;
+}
 
-const ITERATIONS = 1000000;
+// Variants
+
+interface Variant {
+  label: string;
+  router: any;
+  supports: readonly MethodName[];
+  isBaseline?: boolean;
+}
+
+const variants: Variant[] = [];
+
+const current = new TrieRouter();
+seed(current);
+variants.push({ label: 'working tree', router: current, supports: KNOWN });
+
+if (BaselineTrieRouter) {
+  const baseline = new BaselineTrieRouter();
+  seed(baseline);
+  variants.push({
+    label: `baseline (${process.env.BASELINE_REF ?? 'main'})`,
+    router: baseline,
+    supports: KNOWN,
+    isBaseline: true,
+  });
+}
+
+const radix = new RadixRouter();
+seed(radix);
+variants.push({ label: 'radix', router: radix, supports: ['find'] });
+
+// Runner
+
+const testPaths = makeTestPaths();
 const pathCount = testPaths.length;
 
-console.log(`Warming up engine with ${pathCount} distinct paths...`);
-for (let i = 0; i < 10000; i++) {
-  const path = testPaths[i % pathCount];
-  router.search("POST", path!);
-  router.find("POST", path);
-  router.optimisedSearch("POST", path!);
-  radix.find("POST", path!);
+function run(router: any, method: MethodName): number {
+  for (let i = 0; i < WARMUP; i++) {
+    router[method]('POST', testPaths[i % pathCount]!);
+  }
+
+  const t0 = performance.now();
+  for (let i = 0; i < ITERATIONS; i++) {
+    router[method]('POST', testPaths[i % pathCount]!);
+  }
+  return performance.now() - t0;
 }
 
-console.log(`Running intense benchmark with ${ITERATIONS} iterations...`);
-
-const startSearch = performance.now();
-for (let i = 0; i < ITERATIONS; i++) {
-  const path = testPaths[i % pathCount];
-  router.search("POST", path!);
+console.log(
+  `routing table: 500 resources / ${pathCount} distinct paths | ` +
+  `${ITERATIONS.toLocaleString()} iterations`
+);
+console.log(`methods: ${selected.join(', ')}`);
+if (!BaselineTrieRouter) {
+  console.log('(no baseline — run `npm run bench:baseline` to compare against main)');
 }
-const endSearch = performance.now();
-const timeSearch = endSearch - startSearch;
 
-const startFind = performance.now();
-for (let i = 0; i < ITERATIONS; i++) {
-  const path = testPaths[i % pathCount];
-  router.find("POST", path);
+for (const method of selected) {
+  const applicable = variants.filter((v) => v.supports.includes(method));
+  if (!applicable.length) continue;
+
+  console.log(`\n===== ${method}() =====`);
+
+  const results = applicable.map((v) => {
+    const ms = run(v.router, method);
+    return { ...v, ms, ops: Math.floor(ITERATIONS / (ms / 1000)) };
+  });
+
+  const base = results.find((r) => r.isBaseline);
+  const width = Math.max(...results.map((r) => r.label.length));
+
+  for (const r of results) {
+    let delta = '';
+    if (base && r !== base) {
+      const pct = ((r.ops / base.ops - 1) * 100);
+      delta = `   ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% vs baseline`;
+    }
+    console.log(
+      `${r.label.padEnd(width)}  ${r.ms.toFixed(2).padStart(8)} ms  ` +
+      `${r.ops.toLocaleString().padStart(12)} ops/sec${delta}`
+    );
+  }
 }
-const endFind = performance.now();
-const timeFind = endFind - startFind;
-
-const startOptimisedSearch = performance.now()
-for (let i = 0; i < ITERATIONS; i++) {
-  const path = testPaths[i % pathCount];
-  router.optimisedSearch("POST", path!);
-}
-const endOptimisedSearch = performance.now();
-const timeOptimisedSearch = endOptimisedSearch - startOptimisedSearch;
-
-const startRadix = performance.now();
-for (let i = 0; i < ITERATIONS; i++) {
-  const path = testPaths[i % pathCount];
-  radix.find("POST", path!);
-}
-const endRadix = performance.now();
-const timeRadix = endRadix - startRadix;
-
-const searchOpsPerSec = Math.floor(ITERATIONS / (timeSearch / 1000));
-const findOpsPerSec = Math.floor(ITERATIONS / (timeFind / 1000));
-const OptimisedSearchOpsPerSec = Math.floor(ITERATIONS / (timeOptimisedSearch / 1000));
-const radixOpsPerSec = Math.floor(ITERATIONS / (timeRadix / 1000));
-
-console.log("=====================================");
-console.log(`Old Search Method Time: ${timeSearch.toFixed(2)} ms`);
-console.log(`Old Search Speed: ${searchOpsPerSec.toLocaleString()} ops/sec`);
-
-console.log("=====================================");
-console.log(`New Find Method Time:   ${timeFind.toFixed(2)} ms`);
-console.log(`New Find Speed: ${findOpsPerSec.toLocaleString()} ops/sec`);
-console.log("=====================================");
-
-console.log("=====================================");
-console.log(`New Optimised Search Time:   ${timeOptimisedSearch.toFixed(2)} ms`);
-console.log(`New optimisedSearch Speed: ${OptimisedSearchOpsPerSec.toLocaleString()} ops/sec`);
-console.log("=====================================");
-
-console.log("=====================================");
-console.log(`Radix find Time:   ${timeRadix.toFixed(2)} ms`);
-console.log(`Radix find Speed: ${radixOpsPerSec.toLocaleString()} ops/sec`);
-console.log("=====================================");
-
-// const multiplier = (findOpsPerSec / searchOpsPerSec).toFixed(2);
-// console.log(`Result: With deep middlewares the new find method is ${multiplier}x faster.`);

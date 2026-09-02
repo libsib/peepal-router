@@ -121,12 +121,12 @@ const pathCount = testPaths.length;
 
 function run(router: any, method: MethodName): number {
   for (let i = 0; i < WARMUP; i++) {
-    router[method]('POST', testPaths[i % pathCount]!);
+    router[method]('GET', testPaths[i % pathCount]!);
   }
 
   const t0 = performance.now();
   for (let i = 0; i < ITERATIONS; i++) {
-    router[method]('POST', testPaths[i % pathCount]!);
+    router[method]('GET', testPaths[i % pathCount]!);
   }
   return performance.now() - t0;
 }

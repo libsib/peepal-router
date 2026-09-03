@@ -29,7 +29,7 @@ export class TrieRouter {
   isCompiled: boolean;
   find: Function;
 
-  //
+  // Precomputed lookup results for static (no ":" / "*") paths, per method.
   private getStatic: Map<string, Find>;
   private postStatic: Map<string, Find>;
   private putStatic: Map<string, Find>;
@@ -39,7 +39,7 @@ export class TrieRouter {
   // Anything outside the six above (HEAD, OPTIONS, lowercase methods, ...).
   private otherStatic: Map<string, Map<string, Find>> | null;
 
-  private otherMethodStatics: Array<string> | null;
+  private staticPaths: Set<string>;
   constructor() {
     this.root = new Node();
     this.globalMiddlewares = [];
@@ -53,18 +53,11 @@ export class TrieRouter {
     this.patchStatic = new Map();
     this.allStatic = new Map();
     this.otherStatic = null;
-    this.otherMethodStatics = null;
+    this.staticPaths = new Set();
   }
 
   collectStaticMiddleware(path: string, method: string): Find {
     let node: Node = this.root;
-    if (path === "/") {
-      return {
-        params: undefined,
-        middlewares: this.globalMiddlewares,
-        handler: node.handlers[method],
-      };
-    }
 
     let middlewares: Array<Function> = this.is_gm
       ? this.globalMiddlewares.slice()
@@ -117,36 +110,26 @@ export class TrieRouter {
   }
 
   private reArrangeHandler(path: string) {
-
-    const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'ALL']
+    const methods = ["GET", "POST", "PUT", "DELETE", "PATCH", ALL_METHOD];
 
     if (this.otherStatic) {
       for (const m of this.otherStatic.keys()) methods.push(m);
     }
 
     for (const method of methods) {
-      const result = this.collectStaticMiddleware(path, method)
-      const map = this.createStaticMapFor(method)
-      if (map.has(path)) map.delete(path);
+      const map = this.createStaticMapFor(method);
+      const result = this.collectStaticMiddleware(path, method);
+      // Never cache a miss: it would shadow the trie walk.
+      if (result.handler === undefined) {
+        map.delete(path);
+        continue;
+      }
       map.set(path, result);
     }
-    
-    // const maps: Map<string, Find>[] = [
-    //   this.getStatic,
-    //   this.postStatic,
-    //   this.putStatic,
-    //   this.deleteStatic,
-    //   this.patchStatic,
-    //   this.allStatic,
-    // ];
+  }
 
-    // if (this.otherStatic) {
-    //   for (const method of this.otherStatic.values()) maps.push(method);
-    // }
-
-    // for (const m of maps){
-        
-    // }
+  private rebuildStatic() {
+    for (const p of this.staticPaths) this.reArrangeHandler(p);
   }
 
   private getStaticMapFor(method: string): Map<string, Find> | undefined {
@@ -187,7 +170,7 @@ export class TrieRouter {
     if (pattern === "/") {
       this.globalMiddlewares.push(...handlers);
       this.is_gm = true;
-      this.reArrangeHandler(pattern)
+      this.rebuildStatic();
       return;
     }
 
@@ -208,17 +191,25 @@ export class TrieRouter {
     node.middlewares.push(...handlers);
 
     node.isEndOfWord = true;
-    this.reArrangeHandler(pattern);
+    this.rebuildStatic();
   }
 
   insert(method: string, pattern: string, handler: Function | Function[]) {
+    const is_static = !pattern.includes(":") && !pattern.includes("*");
+
+    if (is_static) this.staticPaths.add(pattern);
+
+    const isNewMethod = this.getStaticMapFor(method) === undefined;
+    this.createStaticMapFor(method);
+
     const handlers = Array.isArray(handler) ? handler : [handler];
     let node = this.root;
 
     if (pattern === "/") {
       node.isEndOfWord = true;
       node.handlers[method] = handlers;
-      this.reArrangeHandler(pattern);
+      if (isNewMethod) this.rebuildStatic();
+      else this.reArrangeHandler(pattern);
       return;
     }
 
@@ -243,10 +234,8 @@ export class TrieRouter {
     node.handlers[method] = handlers;
     node.isEndOfWord = true;
 
-    const is_static = !pattern.includes(":") && !pattern.includes("*");
-    if (is_static) {
-      this.reArrangeHandler(pattern)
-    }
+    if (isNewMethod) this.rebuildStatic();
+    else if (is_static) this.reArrangeHandler(pattern);
   }
 
   add(method: string, pattern: string, handler: Function | Function[]) {
@@ -254,15 +243,12 @@ export class TrieRouter {
   }
 
   search(method: string, pattern: string) {
-    if (method === "GET") {
-      const result = this.getStatic.get(pattern)
-      if (result !== undefined) return result;
-    } else {
-      const staticMatch = this.createStaticMapFor(method)
-      const result = staticMatch.get(pattern)
+    const staticMap = method === "GET" ? this.getStatic : this.getStaticMapFor(method);
+    if (staticMap !== undefined) {
+      const result = staticMap.get(pattern);
       if (result !== undefined) return result;
     }
-    
+
     let node = this.root;
     const pathSegments = pattern.split("/");
 
@@ -458,16 +444,3 @@ export class TrieRouter {
     }
   }
 }
-
-const r = new TrieRouter();
-r.addMiddleware("/user/*", () => {});
-r.addMiddleware("/", () => {});
-
-r.add("GET", "/user/okay", () => {});
-
-let rs = r.search("GET", "/user/okay");
-console.log(rs)
-
-r.add("GET", "/okay", () => {});
-rs = r.search("POST", "/okay");
-console.log(rs)

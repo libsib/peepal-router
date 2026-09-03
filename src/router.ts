@@ -1,9 +1,15 @@
 // Copyright (c) 2026 Pradeep
 // Licensed under the MIT License
 
-import { Find } from "./radix";
-
 export const ALL_METHOD = "ALL";
+
+// What every lookup method returns. Mirrors diesel's `Find` contract so the
+// two implementations stay drop-in compatible.
+export interface Find {
+  params: Record<string, string> | undefined;
+  middlewares: Function[] | undefined;
+  handler: Array<Function> | undefined;
+}
 
 class Node {
   children: Record<string, Node>;

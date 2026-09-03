@@ -10,5 +10,5 @@
     "skipLibCheck": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts", "src/router.test-utils.ts", "src/router.shared-cases.ts"]
+  "exclude": ["src/radix.ts", "src/**/*.test.ts", "src/router.test-utils.ts", "src/router.shared-cases.ts"]
 }

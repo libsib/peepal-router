@@ -1,9 +1,7 @@
 // Copyright (c) 2026 Pradeep
 // Licensed under the MIT License
 
-// What every lookup method returns. Mirrors diesel's `Find` contract so the
-// two implementations stay drop-in compatible.
-export interface Find {
+interface Find {
   params: Record<string, string> | undefined;
   middlewares: Function[] | undefined;
   handler: Array<Function> | undefined;

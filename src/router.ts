@@ -56,7 +56,7 @@ export class TrieRouter {
     this.staticPaths = new Set();
   }
 
-  collectStaticMiddleware(path: string, method: string): Find {
+  private uncachedSearch(path: string, method: string): Find {
     let node: Node = this.root;
 
     let middlewares: Array<Function> = this.is_gm
@@ -118,7 +118,7 @@ export class TrieRouter {
 
     for (const method of methods) {
       const map = this.createStaticMapFor(method);
-      const result = this.collectStaticMiddleware(path, method);
+      const result = this.uncachedSearch(path, method);
       // Never cache a miss: it would shadow the trie walk.
       if (result.handler === undefined) {
         map.delete(path);

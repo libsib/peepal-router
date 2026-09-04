@@ -3,7 +3,7 @@
 
 export const ALL_METHOD = "ALL";
 
-export interface Find {
+export interface Result {
   params: Record<string, string> | undefined;
   middlewares: Function[] | undefined;
   handler: Array<Function> | undefined;
@@ -33,17 +33,18 @@ export class TrieRouter {
   isCompiled: boolean;
   find: Function;
 
-  // Precomputed lookup results for static (no ":" / "*") paths, per method.
-  private getStatic: Map<string, Find>;
-  private postStatic: Map<string, Find>;
-  private putStatic: Map<string, Find>;
-  private deleteStatic: Map<string, Find>;
-  private patchStatic: Map<string, Find>;
-  private allStatic: Map<string, Find>;
-  // Anything outside the six above (HEAD, OPTIONS, lowercase methods, ...).
-  private otherStatic: Map<string, Map<string, Find>> | null;
+  // pre-computed lookup results for static (no ":" / "*") paths, per method.
+  private getStatic: Map<string, Result>;
+  private postStatic: Map<string, Result>;
+  private putStatic: Map<string, Result>;
+  private deleteStatic: Map<string, Result>;
+  private patchStatic: Map<string, Result>;
+  private allStatic: Map<string, Result>;
+  // anything outside the six above (HEAD, OPTIONS, lowercase methods, ...).
+  private otherStatic: Map<string, Map<string, Result>> | null;
 
   private staticPaths: Set<string>;
+
   constructor() {
     this.root = new Node();
     this.globalMiddlewares = [];
@@ -60,7 +61,13 @@ export class TrieRouter {
     this.staticPaths = new Set();
   }
 
-  private uncachedSearch(path: string, method: string): Find {
+  /**
+   * Walks the trie for a path, bypassing the static cache.
+   * @param path - request path, e.g. "/users/1"
+   * @param method - HTTP method, or ALL_METHOD
+   * @returns params, middlewares, and the matched handler (undefined on a miss)
+   */
+  private uncachedSearch(path: string, method: string): Result {
     let node: Node = this.root;
 
     let middlewares: Array<Function> = this.is_gm
@@ -113,6 +120,11 @@ export class TrieRouter {
     };
   }
 
+  /**
+   * Recomputes the static cache entry for one path, for every known method.
+   * A method with no handler is dropped so it falls through to the trie walk.
+   * @param path - static path to recompute
+   */
   private reArrangeHandler(path: string) {
     const methods = ["GET", "POST", "PUT", "DELETE", "PATCH", ALL_METHOD];
 
@@ -121,9 +133,10 @@ export class TrieRouter {
     }
 
     for (const method of methods) {
-      const map = this.createStaticMapFor(method);
+      const map = this.getOrCreateStaticMapFor(method);
       const result = this.uncachedSearch(path, method);
-      // Never cache a miss: it would shadow the trie walk.
+      // if the handler doesn't exist it means , the user hasn't registered the api for that method
+      // so we can delete that path for that method map ( it's safe )
       if (result.handler === undefined) {
         map.delete(path);
         continue;
@@ -132,11 +145,19 @@ export class TrieRouter {
     }
   }
 
+  /**
+   * Recomputes the static cache for every registered static path.
+   */
   private rebuildStatic() {
     for (const p of this.staticPaths) this.reArrangeHandler(p);
   }
 
-  private getStaticMapFor(method: string): Map<string, Find> | undefined {
+  /**
+   * Looks up the static cache map for a method.
+   * @param method - HTTP method, or ALL_METHOD
+   * @returns the map, or undefined if the method has none yet
+   */
+  private getStaticMapFor(method: string): Map<string, Result> | undefined {
     switch (method) {
       case "GET":
         return this.getStatic;
@@ -155,20 +176,35 @@ export class TrieRouter {
     }
   }
 
-  private createStaticMapFor(method: string): Map<string, Find> {
+  /**
+   * Like getStaticMapFor, but creates the map under otherStatic when missing.
+   * @param method - HTTP method, or ALL_METHOD
+   * @returns the method's static cache map
+   */
+  private getOrCreateStaticMapFor(method: string): Map<string, Result> {
     const existing = this.getStaticMapFor(method);
     if (existing !== undefined) return existing;
 
     if (!this.otherStatic) this.otherStatic = new Map();
-    const map: Map<string, Find> = new Map();
+    const map: Map<string, Result> = new Map();
     this.otherStatic.set(method, map);
     return map;
   }
 
+  /**
+   * Alias for pushMiddleware.
+   * @param pattern - path to bind to; "/" makes it global
+   * @param handlers - one middleware or an array of handlers
+   */
   addMiddleware(pattern: string, handlers: Function | Function[]) {
     return this.pushMiddleware(pattern, handlers);
   }
 
+  /**
+   * Binds middleware to a path, then rebuilds the static cache.
+   * @param pattern - path to bind to; "/" makes it global
+   * @param handlers - one middleware or an array of middlewares
+   */
   pushMiddleware(pattern: string, handlers: Function | Function[]) {
     if (!Array.isArray(handlers)) handlers = [handlers];
     if (pattern === "/") {
@@ -198,13 +234,19 @@ export class TrieRouter {
     this.rebuildStatic();
   }
 
+  /**
+   * Registers a handler for a method and path pattern.
+   * @param method - HTTP method, or ALL_METHOD to match any
+   * @param pattern - route pattern; ":name" is a param, "*" a wildcard
+   * @param handler - one handler or an array of handlers
+   */
   insert(method: string, pattern: string, handler: Function | Function[]) {
     const is_static = !pattern.includes(":") && !pattern.includes("*");
 
     if (is_static) this.staticPaths.add(pattern);
 
     const isNewMethod = this.getStaticMapFor(method) === undefined;
-    this.createStaticMapFor(method);
+    this.getOrCreateStaticMapFor(method);
 
     const handlers = Array.isArray(handler) ? handler : [handler];
     let node = this.root;
@@ -213,7 +255,7 @@ export class TrieRouter {
       node.isEndOfWord = true;
       node.handlers[method] = handlers;
       if (isNewMethod) this.rebuildStatic();
-      else this.reArrangeHandler(pattern);
+      this.reArrangeHandler(pattern);
       return;
     }
 
@@ -239,15 +281,28 @@ export class TrieRouter {
     node.isEndOfWord = true;
 
     if (isNewMethod) this.rebuildStatic();
-    else if (is_static) this.reArrangeHandler(pattern);
+    if (is_static) this.reArrangeHandler(pattern);
   }
 
+  /**
+   * Alias for insert.
+   * @param method - HTTP method, or ALL_METHOD to match any
+   * @param pattern - route pattern; ":name" is a param, "*" a wildcard
+   * @param handler - one handler or an array of them
+   */
   add(method: string, pattern: string, handler: Function | Function[]) {
     return this.insert(method, pattern, handler);
   }
 
+  /**
+   * Looks up a route: static cache first, trie walk on a miss.
+   * @param method - HTTP method
+   * @param pattern - request path
+   * @returns params, middlewares, and the matched handler (undefined on a miss)
+   */
   search(method: string, pattern: string) {
-    const staticMap = method === "GET" ? this.getStatic : this.getStaticMapFor(method);
+    const staticMap =
+      method === "GET" ? this.getStatic : this.getStaticMapFor(method);
     if (staticMap !== undefined) {
       const result = staticMap.get(pattern);
       if (result !== undefined) return result;
@@ -307,6 +362,13 @@ export class TrieRouter {
     };
   }
 
+  /**
+   * Like search, but scans the path char by char instead of splitting it,
+   * and never reads the static cache.
+   * @param method - HTTP method
+   * @param pattern - request path
+   * @returns params, middlewares, and the matched handler (undefined on a miss)
+   */
   optimisedSearch(method: string, pattern: string) {
     let node = this.root;
     let element = "";
@@ -373,7 +435,14 @@ export class TrieRouter {
     };
   }
 
-  // unstable API
+  /**
+   * Looks up a route using precompiled handler chains; needs compile() first.
+   * Middlewares are already baked into the chain, so none are returned.
+   * @param method - HTTP method
+   * @param pattern - request path
+   * @returns params and the compiled handler chain (undefined on a miss)
+   * @remarks unstable API
+   */
   compiledFind(method: string, pattern: string) {
     let node = this.root;
     const pathSegments = pattern.split("/");
@@ -410,7 +479,13 @@ export class TrieRouter {
       handler: node?.finalHandler?.[method] ?? node?.finalHandler?.[ALL_METHOD],
     };
   }
-  // unstabel api
+  /**
+   * First find() call: compiles the trie, swaps find() for compiledFind, then delegates.
+   * @param method - HTTP method
+   * @param pattern - request path
+   * @returns the same shape as compiledFind
+   * @remarks unstable API
+   */
   private lazyFind(method: string, pattern: string) {
     this.compile();
 
@@ -418,12 +493,19 @@ export class TrieRouter {
     return this.compiledFind(method, pattern);
   }
 
+  /**
+   * Bakes middlewares into each route's handler chain, ready for compiledFind.
+   */
   compile() {
     this.compileNode(this.root, this.globalMiddlewares);
   }
 
-  // unstable api
-  // Compile method which will compile all these routes once our application registers all it's route.
+  /**
+   * Recursively builds finalHandler for a node and its descendants.
+   * @param node - node to compile
+   * @param inheritedMiddlewares - middlewares inherited from ancestors
+   * @remarks unstable API
+   */
   private compileNode(node: Node, inheritedMiddlewares: Array<Function>) {
     // a node's own middlewares apply only to itself, they must not be
     // inherited by descendants - mirrors search()'s scoping.

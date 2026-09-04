@@ -369,7 +369,7 @@ export class TrieRouter {
    * @param pattern - request path
    * @returns params, middlewares, and the matched handler (undefined on a miss)
    */
-  #optimisedSearch(method: string, pattern: string) {
+  optimisedSearch(method: string, pattern: string) {
     let node = this.root;
     let element = "";
 

@@ -28,7 +28,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && npm run build:js && npm run build:types",
+    "build:js": "bun build src/index.ts --outfile dist/index.js --target node --format esm",
+    "build:types": "tsc -p tsconfig.build.json && mv dist/router.d.ts dist/index.d.ts",
     "test": "bun test",
     "prepublishOnly": "npm run build"
   },

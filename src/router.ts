@@ -3,8 +3,6 @@
 
 export const ALL_METHOD = "ALL";
 
-// What every lookup method returns. Mirrors diesel's `Find` contract so the
-// two implementations stay drop-in compatible.
 export interface Find {
   params: Record<string, string> | undefined;
   middlewares: Function[] | undefined;

@@ -7,16 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.1] - 2026-09-05
 
-### Fixed
-
-- **Global middlewares were dropped on the most common lookup.** `search()`
-  only allocated its middleware list once something pushed into it, but the
-  seed that copies `globalMiddlewares` was tied to that first push. A route
-  that matched and collected nothing else returned no middlewares at all, so
-  middleware registered with `addMiddleware("/")` never ran for it. Lookups
-  that collect nothing now resolve the default at return time.
-- Wildcard middleware bound to a static segment (`addMiddleware("/user/*")`
-  reached via `/user/me/...`) was skipped on one branch of the walk.
+No routing behaviour changes: the same request matches the same handler with
+the same params as in 0.6.0. This release is the wildcard and child-lookup
+optimisation, plus a type-only rename. See the frozen-array note below for the
+one observable difference.
 
 ### Performance
 
@@ -34,8 +28,10 @@ alternating order, medians:
   for that lookup whether or not any wildcard was registered.
 - Child lookups were being performed twice per branch, once to test and once to
   assign. They are now hoisted into a local and reused.
-- A lookup that collects no middleware and has no global middlewares registered
-  returns a shared frozen empty array instead of allocating a new one.
+- A lookup that collects no middleware, on a router with no global middlewares
+  registered, returns a shared frozen empty array rather than allocating one.
+  The returned array is frozen, so callers that previously mutated it in place
+  will now throw.
 
 ### Changed
 

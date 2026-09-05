@@ -3,6 +3,9 @@
 
 export const ALL_METHOD = "ALL";
 
+// shared and frozen array for returning midl with 0 func
+const NO_MIDDLEWARES: readonly Function[] = Object.freeze([]);
+
 export interface Result {
   params: Record<string, string> | undefined;
   middlewares: Function[] | undefined;
@@ -70,9 +73,7 @@ export class TrieRouter {
   private uncachedSearch(path: string, method: string): Result {
     let node: Node = this.root;
 
-    let middlewares: Array<Function> = this.is_gm
-      ? this.globalMiddlewares.slice()
-      : [];
+    let middlewares: Array<Function> | undefined;
     let params: Record<string, string> | undefined;
     const pathSegments = path.split("/");
 
@@ -86,12 +87,18 @@ export class TrieRouter {
       if (node.children[element]) {
         if (wildcard && wildcard.middlewares.length > 0) {
           const mw = wildcard.middlewares;
+          if (middlewares === undefined) {
+            middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
+          }
           for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
         }
         node = node.children[element]!;
       } else if (node.children[":"]) {
         if (wildcard && wildcard.middlewares.length > 0) {
           const mw = wildcard.middlewares;
+          if (middlewares === undefined) {
+            middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
+          }
           for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
         }
         node = node.children[":"];
@@ -101,12 +108,19 @@ export class TrieRouter {
         node = wildcard;
         break;
       } else {
-        return { params: params, middlewares: middlewares, handler: undefined };
+        return {
+          params: params,
+          middlewares: middlewares ?? this.defaultMiddlewares(),
+          handler: undefined,
+        };
       }
     }
 
     if (node?.middlewares?.length > 0) {
       const mw = node.middlewares;
+      if (middlewares === undefined) {
+        middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
+      }
       for (let j = 0; j < mw.length; j++) {
         middlewares.push(mw[j]);
       }
@@ -115,7 +129,7 @@ export class TrieRouter {
     const methodHandler = node.handlers[method] || node.handlers[ALL_METHOD];
     return {
       params: params,
-      middlewares: middlewares,
+      middlewares: middlewares ?? this.defaultMiddlewares(),
       handler: methodHandler,
     };
   }
@@ -311,9 +325,7 @@ export class TrieRouter {
     let node = this.root;
     const pathSegments = pattern.split("/");
 
-    let middlewares: Array<Function> = this.is_gm
-      ? this.globalMiddlewares.slice()
-      : [];
+    let middlewares: Array<Function> | undefined;
     let params: Record<string, string> | undefined;
 
     for (let i = 0; i < pathSegments.length; i++) {
@@ -326,12 +338,20 @@ export class TrieRouter {
       if (node.children[element]) {
         if (wildcard && wildcard.middlewares.length > 0) {
           const mw = wildcard.middlewares;
-          for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
+          if (middlewares === undefined) {
+            middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
+          }
+          for (let j = 0; j < mw.length; j++) {
+            middlewares.push(mw[j]);
+          }
         }
         node = node.children[element]!;
       } else if (node.children[":"]) {
         if (wildcard && wildcard.middlewares.length > 0) {
           const mw = wildcard.middlewares;
+          if (middlewares === undefined) {
+            middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
+          }
           for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
         }
         node = node.children[":"];
@@ -341,7 +361,11 @@ export class TrieRouter {
         node = wildcard;
         break;
       } else {
-        return { params: params, middlewares: middlewares, handler: undefined };
+        return {
+          params: params,
+          middlewares: middlewares ?? this.defaultMiddlewares(),
+          handler: undefined,
+        };
       }
     }
 
@@ -349,6 +373,9 @@ export class TrieRouter {
     // bound to an ancestor on the walk must not leak into its descendants.
     if (node?.middlewares?.length > 0) {
       const mw = node.middlewares;
+      if (middlewares === undefined) {
+        middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
+      }
       for (let j = 0; j < mw.length; j++) {
         middlewares.push(mw[j]);
       }
@@ -357,9 +384,21 @@ export class TrieRouter {
     const methodHandler = node.handlers[method] || node.handlers[ALL_METHOD];
     return {
       params: params,
-      middlewares: middlewares,
+      middlewares: middlewares ?? this.defaultMiddlewares(),
       handler: methodHandler,
     };
+  }
+
+  /**
+   * The middleware list for a lookup that collected none of its own. Global
+   * middlewares are copied because callers may mutate the result; with none
+   * registered, every such lookup shares one frozen empty array.
+   * @returns the middlewares to hand back when none were collected
+   */
+  private defaultMiddlewares(): Function[] {
+    return this.is_gm
+      ? this.globalMiddlewares.slice()
+      : (NO_MIDDLEWARES as Function[]);
   }
 
   /**
@@ -373,9 +412,7 @@ export class TrieRouter {
     let node = this.root;
     let element = "";
 
-    let middlewares: Array<Function> = this.is_gm
-      ? this.globalMiddlewares.slice()
-      : [];
+    let middlewares: Array<Function> | undefined;
     let params: Record<string, string> | undefined;
 
     for (let i = 0; i <= pattern.length; i++) {
@@ -389,12 +426,18 @@ export class TrieRouter {
         if (node.children[element]) {
           if (wildcard && wildcard.middlewares.length > 0) {
             const mw = wildcard.middlewares;
+            if (middlewares === undefined) {
+              middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
+            }
             for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
           }
           node = node.children[element];
         } else if (node.children[":"]) {
           if (wildcard && wildcard.middlewares.length > 0) {
             const mw = wildcard.middlewares;
+            if (middlewares === undefined) {
+              middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
+            }
             for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
           }
           node = node.children[":"];
@@ -406,7 +449,7 @@ export class TrieRouter {
         } else {
           return {
             params: params,
-            middlewares: middlewares,
+            middlewares: middlewares ?? this.defaultMiddlewares(),
             handler: undefined,
           };
         }
@@ -422,6 +465,9 @@ export class TrieRouter {
     // bound to an ancestor on the walk must not leak into its descendants.
     if (node?.middlewares?.length > 0) {
       const mw = node.middlewares;
+      if (middlewares === undefined) {
+        middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
+      }
       for (let j = 0; j < mw.length; j++) {
         middlewares.push(mw[j]);
       }
@@ -430,7 +476,7 @@ export class TrieRouter {
     const methodHandler = node.handlers[method] || node.handlers[ALL_METHOD];
     return {
       params: params,
-      middlewares: middlewares,
+      middlewares: middlewares ?? this.defaultMiddlewares(),
       handler: methodHandler,
     };
   }

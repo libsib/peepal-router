@@ -8,7 +8,7 @@
     "bench": "bash bench.sh",
     "bench:peepal": "bun routers/peepal-bench.ts",
     "bench:routers": "bun routers/bench.ts",
-    "bench:baseline": "mkdir -p baseline && git -C .. show ${BASELINE_REF:-main}:src/router.ts > baseline/router.ts && echo \"baseline written from ${BASELINE_REF:-main}\""
+    "bench:baseline": "mkdir -p baseline && git -C .. show ${BASELINE_REF:-main}:src/router.ts > baseline/router.ts && git -C .. rev-parse --short ${BASELINE_REF:-main} > baseline/REF && echo \"${BASELINE_REF:-main}\" >> baseline/REF && echo \"baseline written from ${BASELINE_REF:-main}\""
   },
   "dependencies": {
     "find-my-way": "^9.7.0",

@@ -11,13 +11,13 @@
     "radix-tree",
     "tree"
   ],
-  "homepage": "https://github.com/pradeepbgs/peepal-router#readme",
+  "homepage": "https://github.com/libsib/peepal-router#readme",
   "bugs": {
-    "url": "https://github.com/pradeepbgs/peepal-router/issues"
+    "url": "https://github.com/libsib/peepal-router/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pradeepbgs/peepal-router.git"
+    "url": "git+https://github.com/libsib/peepal-router.git"
   },
   "license": "MIT",
   "author": "pradeepkumar",

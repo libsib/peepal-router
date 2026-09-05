@@ -1,4 +1,3 @@
-![Trie Structure](assets/peepar.jpeg)
 # Peepar
 
 A fast and minimal Trie based HTTP router.

@@ -95,3 +95,90 @@ export function describeDieselPortedCases(method: "search" | "optimisedSearch" |
     });
   });
 }
+
+// The lazy `middlewares` init only materialises the array once something
+// pushes into it, so the lookups that collect nothing are the ones that
+// regress. These use dynamic paths on purpose: a static path is served from
+// the precomputed cache and never reaches the walk at all. find() is excluded
+// because it merges middlewares into the handler chain instead of returning
+// them separately.
+export function describeLazyMiddlewareCases(
+  method: "search" | "optimisedSearch",
+) {
+  describe(`TrieRouter.${method} - lazy middleware init`, () => {
+    const call = (r: TrieRouter, path: string) =>
+      (r as any)[method]("GET", path);
+
+    test("global middlewares survive a match that collects nothing else", () => {
+      const r = new TrieRouter();
+      r.addMiddleware("/", () => "global");
+      r.add("GET", "/user/:id", () => "handler");
+
+      const result = call(r, "/user/123");
+      expect(result.middlewares?.map((fn: Function) => fn())).toEqual([
+        "global",
+      ]);
+      expect(runResult(result)).toBe("handler");
+    });
+
+    test("wildcard middleware is collected on the static branch too", () => {
+      const r = new TrieRouter();
+      r.addMiddleware("/user/*", () => "wildcard");
+      r.add("GET", "/user/me/:x", () => "handler");
+
+      const result = call(r, "/user/me/1");
+      expect(result.middlewares?.map((fn: Function) => fn())).toEqual([
+        "wildcard",
+      ]);
+    });
+
+    test("a match with no middleware anywhere returns an empty list", () => {
+      const r = new TrieRouter();
+      r.add("GET", "/user/:id", () => "handler");
+
+      expect(call(r, "/user/123").middlewares).toEqual([]);
+    });
+
+    test("global middlewares are still returned on a miss", () => {
+      const r = new TrieRouter();
+      r.addMiddleware("/", () => "global");
+      r.add("GET", "/user/:id", () => "handler");
+
+      const result = call(r, "/nope/nope");
+      expect(result.handler).toBeUndefined();
+      expect(result.middlewares?.map((fn: Function) => fn())).toEqual([
+        "global",
+      ]);
+    });
+
+    test("the shared empty list is not mutated by a caller", () => {
+      const r = new TrieRouter();
+      r.add("GET", "/user/:id", () => "handler");
+
+      const first = call(r, "/user/1");
+      expect(() => first.middlewares.push(() => "leak")).toThrow();
+      expect(call(r, "/user/2").middlewares).toEqual([]);
+    });
+
+    // the static cache is populated by uncachedSearch, so a cache hit is the
+    // only way to exercise that walk's lazy init.
+    test("cached static routes keep their global middlewares", () => {
+      const r = new TrieRouter();
+      r.addMiddleware("/", () => "global");
+      r.add("GET", "/about", () => "handler");
+
+      const result = r.search("GET", "/about");
+      expect(result.middlewares?.map((fn: Function) => fn())).toEqual([
+        "global",
+      ]);
+      expect(runResult(result)).toBe("handler");
+    });
+
+    test("cached static route with no middleware returns an empty list", () => {
+      const r = new TrieRouter();
+      r.add("GET", "/about", () => "handler");
+
+      expect(r.search("GET", "/about").middlewares).toEqual([]);
+    });
+  });
+}

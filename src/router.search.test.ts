@@ -1,7 +1,10 @@
 import { describe, expect, test, beforeAll } from "bun:test";
 import { TrieRouter, ALL_METHOD } from "./router";
 import { runResult } from "./router.test-utils";
-import { describeDieselPortedCases } from "./router.shared-cases";
+import {
+  describeDieselPortedCases,
+  describeLazyMiddlewareCases,
+} from "./router.shared-cases";
 
 let router: TrieRouter;
 
@@ -169,3 +172,4 @@ describe("TrieRouter.search - wildcard and dynamic middlewares combined", () => 
 });
 
 describeDieselPortedCases("search");
+describeLazyMiddlewareCases("search");

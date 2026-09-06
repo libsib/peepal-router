@@ -5,6 +5,32 @@ All notable changes to `peepal-router` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-09-06
+
+### Performance
+
+- `optimisedSearch()` now reads the per-method static cache before walking the
+  trie, as `search()` already did. A static path costs one `Map` lookup instead
+  of a full character scan.
+
+  Measured on the benchmark table (21 of 82 paths cacheable), 1M iterations x
+  11 reps, alternating order, medians:
+
+  | runtime | before | after | |
+  | --- | --- | --- | --- |
+  | node 24 (V8) | 3,840,894 ops/s | 4,268,566 ops/s | +11% |
+  | bun 1.4 (JSC) | 3,813,394 ops/s | 4,557,841 ops/s | +20% |
+
+  The gain scales with how much of your traffic hits static routes; an
+  all-dynamic table sees roughly none.
+
+### Changed
+
+- Repeated `optimisedSearch()` calls for the same static path now return the
+  same cached `Result` object rather than a freshly built one. Mutating a
+  returned result would affect later lookups for that path. `search()` has
+  behaved this way since 0.6.0; this makes the two consistent.
+
 ## [0.6.2] - 2026-09-05
 
 Metadata only. No code changes: the published `dist` is byte-identical to
@@ -118,6 +144,7 @@ alternating order, medians:
 
 Initial published releases.
 
+[0.6.3]: https://github.com/libsib/peepal-router/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/libsib/peepal-router/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/libsib/peepal-router/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/libsib/peepal-router/compare/v0.5.2...v0.6.0

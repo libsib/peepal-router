@@ -20,7 +20,10 @@ class Node {
   params: Record<string, string>;
   finalHandler: Record<string, Array<Function> | undefined>;
   
-  hasWildcardChild: boolean;
+  //
+  paramChild: Node | undefined;
+  wildcardChild: Node | undefined;
+  
   constructor() {
     this.children = {};
     this.handlers = {};
@@ -28,7 +31,8 @@ class Node {
     this.middlewares = [];
     this.params = {};
     this.finalHandler = undefined;
-    this.hasWildcardChild = false;
+    this.wildcardChild = undefined;
+    this.paramChild = undefined;
   }
 }
 
@@ -88,8 +92,8 @@ export class TrieRouter {
 
       let next = node.children[element];
       if (next !== undefined) {
-        if (node.hasWildcardChild) {
-          const mw = node.children["*"].middlewares;
+        if (node.wildcardChild !== undefined) {
+          const mw = node.wildcardChild.middlewares;
           if (mw.length > 0) {
             if (middlewares === undefined) {
               middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
@@ -98,9 +102,9 @@ export class TrieRouter {
           }
         }
         node = next;
-      } else if ((next = node.children[":"]) !== undefined) {
-        if (node.hasWildcardChild) {
-          const mw = node.children["*"].middlewares;
+      } else if (node.paramChild !== undefined) {
+        if (node.wildcardChild !== undefined) {
+          const mw = node.wildcardChild.middlewares;
           if (mw.length > 0) {
             if (middlewares === undefined) {
               middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
@@ -108,11 +112,11 @@ export class TrieRouter {
             for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
           }
         }
-        node = next;
+        node = node.paramChild;
         if (params === undefined) params = {};
         params[node.params[method]] = element;
-      } else if (node.hasWildcardChild) {
-        node = node.children["*"];
+      } else if (node.wildcardChild !== undefined) {
+        node = node.wildcardChild;
         break;
       } else {
         return {
@@ -141,6 +145,10 @@ export class TrieRouter {
     };
   }
 
+  private collectStaticMiddlewares(path: string) {
+    // will imple myself , don't touch it.
+  }
+  
   /**
    * Recomputes the static cache entry for one path, for every known method.
    * A method with no handler is dropped so it falls through to the trie walk.
@@ -242,11 +250,13 @@ export class TrieRouter {
       let key = element;
       if (element.startsWith(":")) {
         key = ":";
-      } else if (element.startsWith("*")) {
-        node.hasWildcardChild = true;
       }
 
       if (!node.children[key]) node.children[key] = new Node();
+
+      // Add child to parent node;
+      if (key === '*') node.wildcardChild = node.children[key];
+      if (key === ':') node.paramChild = node.children[key];
 
       node = node.children[key];
     }
@@ -291,11 +301,13 @@ export class TrieRouter {
       if (element.startsWith(":")) {
         key = ":";
         cleanParam = element.slice(1);
-      } else if (element.startsWith("*")) {
-        node.hasWildcardChild = true;
       }
 
       if (!node.children[key]) node.children[key] = new Node();
+
+      // Add child to parent node;
+      if (key === '*') node.wildcardChild = node.children[key];
+      if (key === ':') node.paramChild = node.children[key];
 
       node = node.children[key];
       if (cleanParam) {
@@ -334,7 +346,7 @@ export class TrieRouter {
     }
 
     let node = this.root;
-    const pathSegments = pattern.split("/");
+    const pathSegments = pattern.split('/');
 
     let middlewares: Array<Function> | undefined;
     let params: Record<string, string> | undefined;
@@ -347,8 +359,8 @@ export class TrieRouter {
 
       let next = node.children[element];
       if (next !== undefined) {
-        if (node.hasWildcardChild) {
-          const mw = node.children["*"].middlewares;
+        if (node.wildcardChild !== undefined) {
+          const mw = node.wildcardChild.middlewares;
           if (mw.length > 0) {
             if (middlewares === undefined) {
               middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
@@ -357,9 +369,9 @@ export class TrieRouter {
           }
         }
         node = next;
-      } else if ((next = node.children[":"]) !== undefined) {
-        if (node.hasWildcardChild) {
-          const mw = node.children["*"].middlewares;
+      } else if (node.paramChild !== undefined) {
+        if (node.wildcardChild !== undefined) {
+          const mw = node.wildcardChild.middlewares;
           if (mw.length > 0) {
             if (middlewares === undefined) {
               middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
@@ -367,11 +379,11 @@ export class TrieRouter {
             for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
           }
         }
-        node = next;
+        node = node.paramChild;
         if (params === undefined) params = {};
         params[node.params[method]] = element;
-      } else if (node.hasWildcardChild) {
-        node = node.children["*"];
+      } else if (node.wildcardChild !== undefined) {
+        node = node.wildcardChild;
         break;
       } else {
         return {
@@ -443,8 +455,8 @@ export class TrieRouter {
         // node search
         let next = node.children[element];
         if (next !== undefined) {
-          if (node.hasWildcardChild) {
-            const mw = node.children["*"].middlewares;
+          if (node.wildcardChild !== undefined) {
+            const mw = node.wildcardChild.middlewares;
             if (mw.length > 0) {
               if (middlewares === undefined) {
                 middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
@@ -453,9 +465,9 @@ export class TrieRouter {
             }
           }
           node = next;
-        } else if ((next = node.children[":"]) !== undefined) {
-          if (node.hasWildcardChild) {
-            const mw = node.children["*"].middlewares;
+        } else if (node.paramChild !== undefined) {
+          if (node.wildcardChild !== undefined) {
+            const mw = node.wildcardChild.middlewares;
             if (mw.length > 0) {
               if (middlewares === undefined) {
                 middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
@@ -463,11 +475,11 @@ export class TrieRouter {
               for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
             }
           }
-          node = next;
+          node = node.paramChild;
           if (params === undefined) params = {};
           params[node.params[method]] = element;
-        } else if (node.hasWildcardChild) {
-          node = node.children["*"];
+        } else if (node.wildcardChild !== undefined) {
+          node = node.wildcardChild;
           break;
         } else {
           return {
@@ -526,12 +538,12 @@ export class TrieRouter {
       let next = node.children[element];
       if (next !== undefined) {
         node = next;
-      } else if ((next = node.children[":"]) !== undefined) {
-        node = next;
+      } else if (node.paramChild !== undefined) {
+        node = node.paramChild;
         if (params === undefined) params = {};
         params[node.params[method]] = element;
-      } else if (node.hasWildcardChild) {
-        node = node.children["*"];
+      } else if (node.wildcardChild !== undefined) {
+        node = node.wildcardChild;
         break;
       } else {
         return {
@@ -589,7 +601,7 @@ export class TrieRouter {
 
     // a "*" child cascades to its non-wildcard siblings' descendants,
     // regardless of which branch search()/find() actually takes at runtime.
-    const wildcard = node.children["*"];
+    const wildcard = node.wildcardChild;
     for (const key in node.children) {
       const childInherited =
         wildcard && key !== "*" && wildcard.middlewares.length > 0

@@ -5,6 +5,29 @@ All notable changes to `peepal-router` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2026-09-06
+
+### Performance
+
+- Each node now holds direct references to its `":"` and `"*"` children, so a
+  walk reads a field instead of doing a dictionary lookup on `children`. Both
+  children remain in `children` as well, which compilation still iterates.
+
+  Roughly **+2% on V8** across `search`, `optimisedSearch` and `find`
+  (500k iterations x 21 reps, alternating order, medians, noise floor +-0.6%).
+  On JSC it is within noise. The gain is modest because these branches only
+  run when the static-child lookup misses; the static lookup itself uses a
+  dynamic key and cannot become a field.
+
+  Verified to return identical handlers, params and middleware counts across
+  every path in the benchmark table.
+
+### Changed
+
+- The internal `hasWildcardChild` flag is replaced by a `wildcardChild` node
+  reference. Both are internal to the trie and neither is part of the public
+  API.
+
 ## [0.6.3] - 2026-09-06
 
 ### Performance
@@ -144,6 +167,7 @@ alternating order, medians:
 
 Initial published releases.
 
+[0.6.4]: https://github.com/libsib/peepal-router/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/libsib/peepal-router/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/libsib/peepal-router/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/libsib/peepal-router/compare/v0.6.0...v0.6.1

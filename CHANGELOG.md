@@ -5,6 +5,29 @@ All notable changes to `peepal-router` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.5] - 2026-09-06
+
+### Performance
+
+- The per-method static caches are now null-prototype objects instead of
+  `Map`s. A cache hit returns without touching the trie at all, so the lookup
+  *is* the whole request - which makes this worth far more than the isolated
+  ~8% gap between object and `Map` access suggests.
+
+  1M iterations x 21 reps, alternating order, medians:
+
+  | workload | node 24 (V8) | bun 1.4 (JSC) |
+  | --- | --- | --- |
+  | every request hits a static route | +60% | +96% |
+  | mixed static and dynamic | +2% | +2% |
+
+  The mixed row is the number to expect for a typical app: the gain applies
+  only to the share of traffic that hits static routes.
+
+  The caches are keyed by raw request paths, so they use `Object.create(null)`
+  for the same reason `children` does - a plain `{}` would make
+  `/__proto__` resolve to an inherited object.
+
 ## [0.6.4] - 2026-09-06
 
 ### Fixed
@@ -179,6 +202,7 @@ alternating order, medians:
 
 Initial published releases.
 
+[0.6.5]: https://github.com/libsib/peepal-router/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/libsib/peepal-router/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/libsib/peepal-router/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/libsib/peepal-router/compare/v0.6.1...v0.6.2

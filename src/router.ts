@@ -47,14 +47,14 @@ export class TrieRouter {
   find: Function;
 
   // pre-computed lookup results for static (no ":" / "*") paths, per method.
-  private getStatic: Map<string, Result>;
-  private postStatic: Map<string, Result>;
-  private putStatic: Map<string, Result>;
-  private deleteStatic: Map<string, Result>;
-  private patchStatic: Map<string, Result>;
-  private allStatic: Map<string, Result>;
+  private getStatic: Record<string, Result>;
+  private postStatic: Record<string, Result>;
+  private putStatic: Record<string, Result>;
+  private deleteStatic: Record<string, Result>;
+  private patchStatic: Record<string, Result>;
+  private allStatic: Record<string, Result>;
   // anything outside the six above (HEAD, OPTIONS, lowercase methods, ...).
-  private otherStatic: Map<string, Map<string, Result>> | null;
+  private otherStatic: Record<string, Record<string, Result>> | null;
 
   private staticPaths: Set<string>;
 
@@ -64,12 +64,12 @@ export class TrieRouter {
     this.isCompiled = false;
     this.find = this.lazyFind;
 
-    this.getStatic = new Map();
-    this.postStatic = new Map();
-    this.putStatic = new Map();
-    this.deleteStatic = new Map();
-    this.patchStatic = new Map();
-    this.allStatic = new Map();
+    this.getStatic = Object.create(null);
+    this.postStatic = Object.create(null);
+    this.putStatic = Object.create(null);
+    this.deleteStatic = Object.create(null);
+    this.patchStatic = Object.create(null);
+    this.allStatic = Object.create(null);
     this.otherStatic = null;
     this.staticPaths = new Set();
   }
@@ -161,7 +161,7 @@ export class TrieRouter {
     const methods = ["GET", "POST", "PUT", "DELETE", "PATCH", ALL_METHOD];
 
     if (this.otherStatic) {
-      for (const m of this.otherStatic.keys()) methods.push(m);
+      for (const key in this.otherStatic) methods.push(key);
     }
 
     for (const method of methods) {
@@ -170,10 +170,10 @@ export class TrieRouter {
       // if the handler doesn't exist it means , the user hasn't registered the api for that method
       // so we can delete that path for that method map ( it's safe )
       if (result.handler === undefined) {
-        map.delete(path);
+        delete map[path];
         continue;
       }
-      map.set(path, result);
+      map[path] = result;
     }
   }
 
@@ -189,7 +189,7 @@ export class TrieRouter {
    * @param method - HTTP method, or ALL_METHOD
    * @returns the map, or undefined if the method has none yet
    */
-  private getStaticMapFor(method: string): Map<string, Result> | undefined {
+  private getStaticMapFor(method: string): Record<string, Result> | undefined {
     switch (method) {
       case "GET":
         return this.getStatic;
@@ -204,7 +204,7 @@ export class TrieRouter {
       case ALL_METHOD:
         return this.allStatic;
       default:
-        return this.otherStatic ? this.otherStatic.get(method) : undefined;
+        return this.otherStatic ? this.otherStatic[method] : undefined;
     }
   }
 
@@ -213,13 +213,13 @@ export class TrieRouter {
    * @param method - HTTP method, or ALL_METHOD
    * @returns the method's static cache map
    */
-  private getOrCreateStaticMapFor(method: string): Map<string, Result> {
+  private getOrCreateStaticMapFor(method: string): Record<string, Result> {
     const existing = this.getStaticMapFor(method);
     if (existing !== undefined) return existing;
 
-    if (!this.otherStatic) this.otherStatic = new Map();
-    const map: Map<string, Result> = new Map();
-    this.otherStatic.set(method, map);
+    if (!this.otherStatic) this.otherStatic = Object.create(null);
+    const map: Record<string, Result> = Object.create(null);
+    this.otherStatic[method] = map;
     return map;
   }
 
@@ -344,7 +344,7 @@ export class TrieRouter {
     const staticMap =
       method === "GET" ? this.getStatic : this.getStaticMapFor(method);
     if (staticMap !== undefined) {
-      const result = staticMap.get(pattern);
+      const result = staticMap[pattern];
       if (result !== undefined) return result;
     }
 
@@ -439,7 +439,7 @@ export class TrieRouter {
     const staticMap =
       method === "GET" ? this.getStatic : this.getStaticMapFor(method);
     if (staticMap !== undefined) {
-      const result = staticMap.get(pattern);
+      const result = staticMap[pattern];
       if (result !== undefined) return result;
     }
 

@@ -10,23 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 
 - The per-method static caches are now null-prototype objects instead of
-  `Map`s. A cache hit returns without touching the trie at all, so the lookup
-  *is* the whole request - which makes this worth far more than the isolated
-  ~8% gap between object and `Map` access suggests.
+  `Map`s. Property access is a little cheaper than `Map.get` here, and a cache
+  hit returns without touching the trie at all.
 
-  1M iterations x 21 reps, alternating order, medians:
-
-  | workload | node 24 (V8) | bun 1.4 (JSC) |
-  | --- | --- | --- |
-  | every request hits a static route | +60% | +96% |
-  | mixed static and dynamic | +2% | +2% |
-
-  The mixed row is the number to expect for a typical app: the gain applies
-  only to the share of traffic that hits static routes.
+  No throughput figure is given: the effect is small enough that it sits inside
+  the run-to-run variance of the benchmarks, and it only applies to the share of
+  traffic that hits static routes. Treat this as neutral-to-slightly-positive
+  rather than a speedup you can plan around.
 
   The caches are keyed by raw request paths, so they use `Object.create(null)`
-  for the same reason `children` does - a plain `{}` would make
-  `/__proto__` resolve to an inherited object.
+  for the same reason `children` does - a plain `{}` would make `/__proto__`
+  resolve to an inherited object.
 
 ## [0.6.4] - 2026-09-06
 
@@ -48,11 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   walk reads a field instead of doing a dictionary lookup on `children`. Both
   children remain in `children` as well, which compilation still iterates.
 
-  Roughly **+2% on V8** across `search`, `optimisedSearch` and `find`
-  (500k iterations x 21 reps, alternating order, medians, noise floor +-0.6%).
-  On JSC it is within noise. The gain is modest because these branches only
-  run when the static-child lookup misses; the static lookup itself uses a
-  dynamic key and cannot become a field.
+  No throughput figure is given: the effect is small enough to sit inside
+  benchmark variance. These branches only run when the static-child lookup
+  misses, and the static lookup itself uses a dynamic key, so it cannot become
+  a field.
 
   Verified to return identical handlers, params and middleware counts across
   every path in the benchmark table.
@@ -68,19 +61,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 
 - `optimisedSearch()` now reads the per-method static cache before walking the
-  trie, as `search()` already did. A static path costs one `Map` lookup instead
+  trie, as `search()` already did. A static path costs one cache lookup instead
   of a full character scan.
 
-  Measured on the benchmark table (21 of 82 paths cacheable), 1M iterations x
-  11 reps, alternating order, medians:
-
-  | runtime | before | after | |
-  | --- | --- | --- | --- |
-  | node 24 (V8) | 3,840,894 ops/s | 4,268,566 ops/s | +11% |
-  | bun 1.4 (JSC) | 3,813,394 ops/s | 4,557,841 ops/s | +20% |
-
-  The gain scales with how much of your traffic hits static routes; an
-  all-dynamic table sees roughly none.
+  No throughput figure is given. The gain scales with how much of your traffic
+  hits static routes; an all-dynamic table sees roughly none.
 
 ### Changed
 
@@ -111,14 +96,8 @@ one observable difference.
 
 ### Performance
 
-Measured against 0.6.0 on a param-heavy table, 400k iterations x 21 reps,
-alternating order, medians:
-
-| lookup | node 24 (V8) | bun 1.4 (JSC) |
-| --- | --- | --- |
-| `search` | +12% | +8% |
-| `optimisedSearch` | +10% | +3% |
-| `find` | +6% | +4% |
+Two dictionary lookups removed from the per-segment walk. No throughput
+figures are given - see the note at the foot of this file.
 
 - Nodes now record whether they have a `"*"` child, so `children["*"]` is only
   looked up when a wildcard actually exists. Previously every path segment paid
@@ -201,6 +180,16 @@ alternating order, medians:
 ## [0.2.1] - 2026-02-24
 
 Initial published releases.
+
+## A note on performance claims
+
+Earlier versions of this file carried specific throughput percentages. They
+have been removed. The benchmarks they came from loaded two builds of the
+router into one process, which pollutes the call sites being measured, and
+rerunning the same comparisons under different harnesses produced results that
+disagreed in both magnitude and sign. The changes themselves are sound and
+verified for correctness; the numbers attached to them were not reliable enough
+to publish. Benchmark your own routing table if throughput matters to you.
 
 [0.6.5]: https://github.com/libsib/peepal-router/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/libsib/peepal-router/compare/v0.6.3...v0.6.4

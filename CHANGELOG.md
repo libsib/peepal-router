@@ -5,6 +5,19 @@ All notable changes to `peepal-router` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-09-05
+
+Metadata only. No code changes: the published `dist` is byte-identical to
+0.6.1, so upgrading cannot alter routing behaviour or performance.
+
+### Changed
+
+- The repository moved from `pradeepbgs/peepal-router` to
+  `libsib/peepal-router`. The `homepage`, `bugs` and `repository` fields in
+  `package.json` now point at the new location.
+- Dropped a README reference to an image that was never part of the published
+  package, so it rendered broken on npm.
+
 ## [0.6.1] - 2026-09-05
 
 No routing behaviour changes: the same request matches the same handler with
@@ -105,10 +118,11 @@ alternating order, medians:
 
 Initial published releases.
 
-[0.6.1]: https://github.com/pradeepbgs/peepal-router/compare/v0.6.0...v0.6.1
-[0.6.0]: https://github.com/pradeepbgs/peepal-router/compare/v0.5.2...v0.6.0
-[0.5.2]: https://github.com/pradeepbgs/peepal-router/compare/v0.5.0...v0.5.2
-[0.5.0]: https://github.com/pradeepbgs/peepal-router/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/pradeepbgs/peepal-router/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/pradeepbgs/peepal-router/compare/v0.2.1...v0.3.0
-[0.2.1]: https://github.com/pradeepbgs/peepal-router/releases/tag/v0.2.1
+[0.6.2]: https://github.com/libsib/peepal-router/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/libsib/peepal-router/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/libsib/peepal-router/compare/v0.5.2...v0.6.0
+[0.5.2]: https://github.com/libsib/peepal-router/compare/v0.5.0...v0.5.2
+[0.5.0]: https://github.com/libsib/peepal-router/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/libsib/peepal-router/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/libsib/peepal-router/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/libsib/peepal-router/releases/tag/v0.2.1

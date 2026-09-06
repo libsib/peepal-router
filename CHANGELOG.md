@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.4] - 2026-09-06
 
+### Fixed
+
+- **A request for `/__proto__`, `/constructor`, `/toString` or any other
+  `Object.prototype` key crashed the lookup.** Node children were stored in a
+  plain `{}`, so `children["__proto__"]` returned an inherited object rather
+  than `undefined`; the walk stepped into it and threw on the next segment.
+  Affected `search()`, `optimisedSearch()` and `find()`, at any depth. Children
+  are now stored in a null-prototype object.
+
+  Any client could trigger this, and an uncaught throw takes down most Node
+  servers, so upgrading from 0.6.3 or earlier is recommended.
+
 ### Performance
 
 - Each node now holds direct references to its `":"` and `"*"` children, so a

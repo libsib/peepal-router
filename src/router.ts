@@ -25,7 +25,10 @@ class Node {
   wildcardChild: Node | undefined;
   
   constructor() {
-    this.children = {};
+    // don't use {} here , it has Object.prototype
+    // so /__proto__ or /constructor gives back an object not undefined
+    // and then search walks into it and crashes
+    this.children = Object.create(null);
     this.handlers = {};
     this.isEndOfWord = false;
     this.middlewares = [];

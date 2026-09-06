@@ -140,7 +140,7 @@ export class TrieRouter {
       }
     }
 
-    const methodHandler = node.handlers[method] || node.handlers[ALL_METHOD];
+    const methodHandler = node.handlers[method] ?? node.handlers[ALL_METHOD];
     return {
       params: params,
       middlewares: middlewares ?? this.defaultMiddlewares(),
@@ -409,7 +409,7 @@ export class TrieRouter {
       }
     }
 
-    const methodHandler = node.handlers[method] || node.handlers[ALL_METHOD];
+    const methodHandler = node.handlers[method] ?? node.handlers[ALL_METHOD];
     return {
       params: params,
       middlewares: middlewares ?? this.defaultMiddlewares(),
@@ -510,7 +510,7 @@ export class TrieRouter {
       }
     }
 
-    const methodHandler = node.handlers[method] || node.handlers[ALL_METHOD];
+    const methodHandler = node.handlers[method] ?? node.handlers[ALL_METHOD];
     return {
       params: params,
       middlewares: middlewares ?? this.defaultMiddlewares(),

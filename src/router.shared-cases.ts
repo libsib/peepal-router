@@ -33,6 +33,60 @@ export function describeDieselPortedCases(method: "search" | "optimisedSearch" |
     });
   });
 
+  // Node.children is keyed by raw path segments. It has to be null-prototype:
+  // with a plain {}, children["__proto__"] resolves to an inherited object and
+  // the walk steps into it, so GET /__proto__ used to throw.
+  describe(`TrieRouter.${method} - Object.prototype keys as path segments`, () => {
+    const PROTO_KEYS = [
+      "__proto__",
+      "constructor",
+      "toString",
+      "valueOf",
+      "hasOwnProperty",
+      "isPrototypeOf",
+    ];
+
+    test("a request for a prototype key misses instead of throwing", () => {
+      const r = new TrieRouter();
+      r.add("GET", "/about", () => "about");
+
+      for (const key of PROTO_KEYS) {
+        const result = (r as any)[method]("GET", `/${key}`);
+        expect(result.handler).toBeUndefined();
+      }
+    });
+
+    test("a prototype key deeper in the path also misses", () => {
+      const r = new TrieRouter();
+      r.add("GET", "/a/b", () => "ab");
+
+      for (const key of PROTO_KEYS) {
+        expect((r as any)[method]("GET", `/a/${key}`).handler).toBeUndefined();
+        expect((r as any)[method]("GET", `/a/${key}/c`).handler).toBeUndefined();
+      }
+    });
+
+    test("a prototype key is captured as a normal param value", () => {
+      const r = new TrieRouter();
+      r.add("GET", "/user/:id", () => "user");
+
+      for (const key of PROTO_KEYS) {
+        const result = (r as any)[method]("GET", `/user/${key}`);
+        expect(runResult(result)).toBe("user");
+        expect(result.params).toEqual({ id: key });
+      }
+    });
+
+    test("a route literally named after a prototype key still works", () => {
+      const r = new TrieRouter();
+      r.add("GET", "/__proto__", () => "proto");
+      r.add("GET", "/constructor/edit", () => "ctor");
+
+      expect(runResult((r as any)[method]("GET", "/__proto__"))).toBe("proto");
+      expect(runResult((r as any)[method]("GET", "/constructor/edit"))).toBe("ctor");
+    });
+  });
+
   describe(`TrieRouter.${method} - dynamic backtracking (ported from diesel)`, () => {
     let r: TrieRouter;
 

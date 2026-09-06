@@ -415,13 +415,19 @@ export class TrieRouter {
   }
 
   /**
-   * Like search, but scans the path char by char instead of splitting it,
-   * and never reads the static cache.
+   * Like search, but scans the path char by char instead of splitting it.
    * @param method - HTTP method
    * @param pattern - request path
    * @returns params, middlewares, and the matched handler (undefined on a miss)
    */
   optimisedSearch(method: string, pattern: string) {
+    const staticMap =
+      method === "GET" ? this.getStatic : this.getStaticMapFor(method);
+    if (staticMap !== undefined) {
+      const result = staticMap.get(pattern);
+      if (result !== undefined) return result;
+    }
+
     let node = this.root;
     let element = "";
 

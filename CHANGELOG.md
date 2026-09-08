@@ -5,6 +5,50 @@ All notable changes to `peepal-router` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.6] - 2026-09-07
+
+### Fixed
+
+- **A request whose method collided with an `Object.prototype` key matched
+  routes that were never registered.** Handlers were stored in a plain `{}`
+  keyed by the method string, so `handlers["constructor"]` returned the
+  inherited `Object` constructor instead of `undefined`. A request line reading
+  `constructor /x HTTP/1.1` - or `toString`, `valueOf`, `__proto__`,
+  `hasOwnProperty` - resolved to a match whose handler was not a handler at
+  all. Affected `search()`, `optimisedSearch()` and `find()`.
+
+  This is the same shape as the `children` bug fixed in 0.6.4, one level up:
+  that one crashed on path segments, this one silently mismatches on methods.
+  The method comes straight off the request line, so any client can reach it.
+  Handlers are now keyed by an integer method slot, which no `Object.prototype`
+  key can collide with.
+
+- **A param on a route registered under `ALL` lost its name when matched by a
+  different method.** Param names were stored under the registering method and
+  read back under the requesting one, so `add("ALL", "/a/:id", h)` followed by
+  `POST /a/9` produced `{ undefined: "9" }` rather than `{ id: "9" }`. Name
+  lookup now falls back to the `ALL` slot the way handler lookup already did,
+  and adds no key at all when the requesting method has no name registered.
+
+### Changed
+
+- `StaticMapType` is now exported. Additive - nothing else in the public API
+  changed.
+
+### Performance
+
+- Handlers, params and compiled handlers are keyed by a small integer method
+  slot instead of the method string. A keyed load with a varying string name
+  goes megamorphic in V8 on the *second* distinct method and falls back to the
+  global stub cache; integer keys live in the elements store and stay
+  monomorphic no matter how many methods are registered.
+
+  No throughput figure is given, for the same reason as 0.6.5. The effect is
+  clear in isolation but sits inside run-to-run variance at the router level,
+  where the trie walk dominates - three separate harnesses disagreed on both
+  magnitude and sign. Treat this as neutral-to-slightly-positive rather than a
+  speedup you can plan around.
+
 ## [0.6.5] - 2026-09-06
 
 ### Performance
@@ -191,6 +235,7 @@ disagreed in both magnitude and sign. The changes themselves are sound and
 verified for correctness; the numbers attached to them were not reliable enough
 to publish. Benchmark your own routing table if throughput matters to you.
 
+[0.6.6]: https://github.com/libsib/peepal-router/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/libsib/peepal-router/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/libsib/peepal-router/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/libsib/peepal-router/compare/v0.6.2...v0.6.3

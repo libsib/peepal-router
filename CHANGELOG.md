@@ -5,6 +5,14 @@ All notable changes to `peepal-router` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-11-04
+
+### Fixed
+
+- The 0.7.0 tarball on npm was built from a stale checkout and still shipped
+  `optimisedSearch()`, `compile()`, `compiledFind()` and the lazy
+  compile-on-first-`find()` path. 0.7.1 ships the code 0.7.0 described.
+
 ## [0.7.0] - 2026-11-04
 
 ### Removed
@@ -251,6 +259,8 @@ disagreed in both magnitude and sign. The changes themselves are sound and
 verified for correctness; the numbers attached to them were not reliable enough
 to publish. Benchmark your own routing table if throughput matters to you.
 
+[0.7.1]: https://github.com/libsib/peepal-router/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/libsib/peepal-router/compare/v0.6.6...v0.7.0
 [0.6.6]: https://github.com/libsib/peepal-router/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/libsib/peepal-router/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/libsib/peepal-router/compare/v0.6.3...v0.6.4

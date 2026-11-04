@@ -5,6 +5,22 @@ All notable changes to `peepal-router` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-04
+
+### Removed
+
+- `optimisedSearch()` - the char-scan variant was 3.5-5x slower than `search()`
+  (`element += char` builds cons-strings that get re-flattened and re-hashed on
+  every child lookup, producing more garbage than one native `String.split`).
+- The compiled lookup path: `compile()`, `compiledFind()` and the lazy
+  compile-on-first-`find()` behaviour (was marked unstable).
+
+### Changed
+
+- **Breaking:** `find()` is now a thin alias of `search()` and returns the same
+  `{ params, middlewares, handler }` shape. It no longer bakes middlewares into
+  the `handler` array.
+
 ## [0.6.6] - 2026-09-07
 
 ### Fixed

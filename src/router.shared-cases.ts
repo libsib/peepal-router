@@ -1,12 +1,12 @@
-// Ported from diesel's lib/router/trie.test.ts, run against all three lookup
-// strategies peepal exposes (search / optimisedSearch / find) since they each
-// re-implement the walk independently and can drift out of sync.
+// Ported from diesel's lib/router/trie.test.ts, run against both lookup entry
+// points peepal exposes (search, and find which aliases it) so the alias stays
+// verified alongside search.
 
 import { describe, expect, test, beforeAll } from "bun:test";
 import { TrieRouter } from "./router";
 import { runResult, chainLength } from "./router.test-utils";
 
-export function describeDieselPortedCases(method: "search" | "optimisedSearch" | "find") {
+export function describeDieselPortedCases(method: "search" | "find") {
   describe(`TrieRouter.${method} - path mid check (ported from diesel)`, () => {
     let r: TrieRouter;
 
@@ -235,11 +235,9 @@ export function describeDieselPortedCases(method: "search" | "optimisedSearch" |
 // The lazy `middlewares` init only materialises the array once something
 // pushes into it, so the lookups that collect nothing are the ones that
 // regress. These use dynamic paths on purpose: a static path is served from
-// the precomputed cache and never reaches the walk at all. find() is excluded
-// because it merges middlewares into the handler chain instead of returning
-// them separately.
+// the precomputed cache and never reaches the walk at all.
 export function describeLazyMiddlewareCases(
-  method: "search" | "optimisedSearch",
+  method: "search" | "find",
 ) {
   describe(`TrieRouter.${method} - lazy middleware init`, () => {
     const call = (r: TrieRouter, path: string) =>

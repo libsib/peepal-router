@@ -13,8 +13,7 @@ export class PeepalRouter implements RouterInstance {
   }
 }
 
-// Uses TrieRouter's own `find` (lazily compiles the trie into finalHandler
-// arrays on first call, then dispatches through compiledFind).
+// Uses TrieRouter's own `find`, which is a thin alias of `search`.
 export class PeepalCompiledRouter implements RouterInstance {
   private router = new TrieRouter();
 

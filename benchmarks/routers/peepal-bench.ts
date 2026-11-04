@@ -17,7 +17,7 @@ import { existsSync, readFileSync } from 'fs';
 const ITERATIONS = Number(process.env.ITERATIONS ?? 1_000_000);
 const WARMUP = 10_000;
 
-const KNOWN = ['search', 'find', 'optimisedSearch'] as const;
+const KNOWN = ['search', 'find'] as const;
 type MethodName = (typeof KNOWN)[number];
 
 // CLI

@@ -103,33 +103,21 @@ doesn't already have its own handler there.
 
 ---
 
-## find() vs search()
+## Looking up a route
 
 ```js
 router.pushMiddleware("/", globalMw);
 router.pushMiddleware("/users/*", usersMw);
 router.add("GET", "/users/:id", userHandler);
 
-// compiled — middlewares already merged into handler
-router.find("GET", "/users/42");
-// { params: { id: "42" }, middlewares: undefined, handler: [globalMw, usersMw, userHandler] }
-
-// walked on every call — kept separate
 router.search("GET", "/users/42");
 // { params: { id: "42" }, middlewares: [globalMw, usersMw], handler: [userHandler] }
 ```
 
-`find()` bakes each route's middlewares and handlers into one array ahead of
-time, so `middlewares` is always `undefined` there — just run `handler` in
-order. `search()` walks the trie on every call and keeps the two lists apart.
-`optimisedSearch()` does the same as `search()` but parses the path without
-`split("/")`, avoiding one array allocation.
-
-> **Note:** the first `find()` call compiles the trie once and permanently
-> switches the router over to the compiled lookup. Routes or middleware added
-> *after* that won't be picked up until you call `router.compile()` again.
-> Register everything before the first `find()`, or use `search()` /
-> `optimisedSearch()` if you add routes at runtime.
+`search()` walks the trie (static paths are served from a precomputed cache)
+and returns `params`, the matching `middlewares`, and the route `handler`
+separately — run the middlewares, then the handler. `find()` is a thin alias of
+`search()` with the identical return shape.
 
 ---
 
@@ -162,10 +150,8 @@ if (res.handler) {
 | --- | --- |
 | `add(method, path, handler \| handler[])` | Register a route. `insert()` is an alias. |
 | `pushMiddleware(path, mw \| mw[])` | Register middleware. `addMiddleware()` is an alias. |
-| `find(method, path)` | Compiled lookup. Middlewares merged into `handler`. |
-| `search(method, path)` | Trie walk. Middlewares and handler kept separate. |
-| `optimisedSearch(method, path)` | Same as `search()`, without the `split("/")` allocation. |
-| `compile()` | Rebuild the compiled tree after adding routes post-`find()`. |
+| `search(method, path)` | Look up a route. Returns `params`, `middlewares`, and `handler`. |
+| `find(method, path)` | Alias of `search()`. |
 
 All lookups return the same shape:
 

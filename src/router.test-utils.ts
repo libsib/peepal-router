@@ -7,11 +7,9 @@ export const runHandlers = (handlers: any) => {
   return result;
 };
 
-// search()/optimisedSearch() return {params, middlewares, handler} (matching
-// diesel's Find contract), while find()/compiledFind() still return the
-// middlewares+handler merged into a single `handler` array. These two
-// helpers work with either shape so the same assertions can run against all
-// three lookup strategies.
+// search() (and its alias find()) return {params, middlewares, handler},
+// matching diesel's Find contract. These helpers flatten that shape so the
+// same assertions can run against either entry point.
 export const runResult = (result: any) => {
   const mws = result?.middlewares ?? [];
   const h = result?.handler;

@@ -173,3 +173,7 @@ describe("TrieRouter.search - wildcard and dynamic middlewares combined", () => 
 
 describeDieselPortedCases("search");
 describeLazyMiddlewareCases("search");
+
+// find() is a thin alias of search(); run the same suites through it.
+describeDieselPortedCases("find");
+describeLazyMiddlewareCases("find");

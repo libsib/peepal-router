@@ -65,15 +65,12 @@ const getOrCreateMethodId = (method: string): number => {
 
 class Node {
   children: Record<string, Node>;
-  isEndOfWord: boolean;
   // stores handlers by method slot (see lookupMethodId)
   handlers: Record<number, Function[]> | undefined;
   middlewares: Function[];
   // stores the param name for this node, by method slot
   params: Record<number, string>;
-  finalHandler: Record<number, Array<Function> | undefined>;
-  
-  //
+
   paramChild: Node | undefined;
   wildcardChild: Node | undefined;
   
@@ -83,10 +80,8 @@ class Node {
     // and then search walks into it and crashes
     this.children = Object.create(null);
     this.handlers = {};
-    this.isEndOfWord = false;
     this.middlewares = [];
     this.params = {};
-    this.finalHandler = undefined;
     this.wildcardChild = undefined;
     this.paramChild = undefined;
   }
@@ -96,8 +91,6 @@ export class TrieRouter {
   root: Node;
   globalMiddlewares: Function[];
   is_gm: boolean = false; // is globalMiddlewares
-  isCompiled: boolean;
-  find: Function;
 
   // pre-computed lookup results for static (no ":" / "*") paths, per method.
   private getStatic: StaticMapType;
@@ -114,8 +107,6 @@ export class TrieRouter {
   constructor() {
     this.root = new Node();
     this.globalMiddlewares = [];
-    this.isCompiled = false;
-    this.find = this.lazyFind;
 
     this.getStatic = Object.create(null);
     this.postStatic = Object.create(null);
@@ -156,7 +147,6 @@ export class TrieRouter {
     let node = this.root;
 
     if (pattern === "/") {
-      node.isEndOfWord = true;
       node.handlers[methodId] = handlers;
       if (isNewMethod) this.rebuildStatic();
       this.reArrangeHandler(pattern);
@@ -186,7 +176,6 @@ export class TrieRouter {
       }
     }
     node.handlers[methodId] = handlers;
-    node.isEndOfWord = true;
 
     if (isNewMethod) this.rebuildStatic();
     if (is_static) this.reArrangeHandler(pattern);
@@ -235,7 +224,6 @@ export class TrieRouter {
 
     node.middlewares.push(...handlers);
 
-    node.isEndOfWord = true;
     this.rebuildStatic();
   }
 
@@ -327,198 +315,13 @@ export class TrieRouter {
   }
 
   /**
-   * Like search, but scans the path char by char instead of splitting it.
+   * Alias for {@link search}. Returns `{ params, middlewares, handler }`.
    * @param method - HTTP method
    * @param pattern - request path
    * @returns params, middlewares, and the matched handler (undefined on a miss)
    */
-  optimisedSearch(method: string, pattern: string) {
-    const staticMap =
-      method === "GET" ? this.getStatic : this.getStaticMapFor(method);
-    if (staticMap !== undefined) {
-      const result = staticMap[pattern];
-      if (result !== undefined) return result;
-    }
-
-    let node = this.root;
-    const methodId = lookupMethodId(method);
-    let element = "";
-
-    let middlewares: Array<Function> | undefined;
-    let params: Record<string, string> | undefined;
-
-    for (let i = 0; i <= pattern.length; i++) {
-      const char = pattern[i];
-
-      if (char === "/" || i === pattern.length) {
-        if (element.length === 0) continue;
-
-        // node search
-        let next = node.children[element];
-        if (next !== undefined) {
-          if (node.wildcardChild !== undefined) {
-            const mw = node.wildcardChild.middlewares;
-            if (mw.length > 0) {
-              if (middlewares === undefined) {
-                middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
-              }
-              for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
-            }
-          }
-          node = next;
-        } else if (node.paramChild !== undefined) {
-          if (node.wildcardChild !== undefined) {
-            const mw = node.wildcardChild.middlewares;
-            if (mw.length > 0) {
-              if (middlewares === undefined) {
-                middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
-              }
-              for (let j = 0; j < mw.length; j++) middlewares.push(mw[j]);
-            }
-          }
-          node = node.paramChild;
-          const paramName = node.params[methodId] ?? node.params[METHOD_ALL];
-          if (paramName !== undefined) {
-            if (params === undefined) params = {};
-            params[paramName] = element;
-          }
-        } else if (node.wildcardChild !== undefined) {
-          node = node.wildcardChild;
-          break;
-        } else {
-          return {
-            params: params,
-            middlewares: middlewares ?? this.defaultMiddlewares(),
-            handler: undefined,
-          };
-        }
-        element = "";
-      } else {
-        // element = element.concat(char)
-        element += char;
-      }
-    }
-
-    // only the final matched node's own middlewares apply - middleware
-    // bound to an ancestor on the walk must not leak into its descendants.
-    if (node?.middlewares?.length > 0) {
-      const mw = node.middlewares;
-      if (middlewares === undefined) {
-        middlewares = this.is_gm ? this.globalMiddlewares.slice() : [];
-      }
-      for (let j = 0; j < mw.length; j++) {
-        middlewares.push(mw[j]);
-      }
-    }
-
-    const methodHandler = node.handlers[methodId] ?? node.handlers[METHOD_ALL];
-    return {
-      params: params,
-      middlewares: middlewares ?? this.defaultMiddlewares(),
-      handler: methodHandler,
-    };
-  }
-
-  /**
-   * Looks up a route using precompiled handler chains; needs compile() first.
-   * Middlewares are already baked into the chain, so none are returned.
-   * @param method - HTTP method
-   * @param pattern - request path
-   * @returns params and the compiled handler chain (undefined on a miss)
-   * @remarks unstable API
-   */
-  compiledFind(method: string, pattern: string) {
-    let node = this.root;
-    const methodId = lookupMethodId(method);
-    const pathSegments = pattern.split("/");
-
-    let params: Record<string, string> | undefined;
-
-    for (let i = 0; i < pathSegments.length; i++) {
-      const element = pathSegments[i];
-      if (element.length === 0) {
-        continue;
-      }
-
-      let next = node.children[element];
-      if (next !== undefined) {
-        node = next;
-      } else if (node.paramChild !== undefined) {
-        node = node.paramChild;
-        const paramName = node.params[methodId] ?? node.params[METHOD_ALL];
-        if (paramName !== undefined) {
-          if (params === undefined) params = {};
-          params[paramName] = element;
-        }
-      } else if (node.wildcardChild !== undefined) {
-        node = node.wildcardChild;
-        break;
-      } else {
-        return {
-          params: params,
-          middlewares: undefined,
-          handler:
-            node?.finalHandler?.[methodId] ?? node?.finalHandler?.[METHOD_ALL],
-        };
-      }
-    }
-    return {
-      params: params,
-      middlewares: undefined,
-      handler: node?.finalHandler?.[methodId] ?? node?.finalHandler?.[METHOD_ALL],
-    };
-  }
-
-  /**
-   * Bakes middlewares into each route's handler chain, ready for compiledFind.
-   */
-  compile() {
-    this.compileNode(this.root, this.globalMiddlewares);
-  }
-
-  /**
-   * First find() call: compiles the trie, swaps find() for compiledFind, then delegates.
-   * @param method - HTTP method
-   * @param pattern - request path
-   * @returns the same shape as compiledFind
-   * @remarks unstable API
-   */
-  private lazyFind(method: string, pattern: string) {
-    this.compile();
-
-    this.find = this.compiledFind;
-    return this.compiledFind(method, pattern);
-  }
-
-  /**
-   * Recursively builds finalHandler for a node and its descendants.
-   * @param node - node to compile
-   * @param inheritedMiddlewares - middlewares inherited from ancestors
-   * @remarks unstable API
-   */
-  private compileNode(node: Node, inheritedMiddlewares: Array<Function>) {
-    // a node's own middlewares apply only to itself, they must not be
-    // inherited by descendants - mirrors search()'s scoping.
-    if (node.isEndOfWord) {
-      if (!node.finalHandler) node.finalHandler = {};
-      const ownMiddlewares = [...inheritedMiddlewares, ...node?.middlewares];
-      for (const key in node.handlers) {
-        const id = Number(key);
-        const finalHandler = [...ownMiddlewares, ...node.handlers[id]];
-        node.finalHandler[id] = finalHandler;
-      }
-    }
-
-    // a "*" child cascades to its non-wildcard siblings' descendants,
-    // regardless of which branch search()/find() actually takes at runtime.
-    const wildcard = node.wildcardChild;
-    for (const key in node.children) {
-      const childInherited =
-        wildcard && key !== "*" && wildcard.middlewares.length > 0
-          ? [...inheritedMiddlewares, ...wildcard.middlewares]
-          : inheritedMiddlewares;
-      this.compileNode(node.children[key], childInherited);
-    }
+  find(method: string, pattern: string) {
+    return this.search(method, pattern);
   }
 
   /**
